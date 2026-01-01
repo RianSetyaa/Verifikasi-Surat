@@ -45,7 +45,7 @@ function generateDocumentNumber(documentType, sequence) {
     };
 
     const code = typeCode[documentType] || 'DOC';
-    const seqNum = String(sequence).padStart(4, '0');
+    const seqNum = String(sequence).padStart(3, '0');
 
     // Format: 0001/PSM/I/2026 atau 0001/NTL/I/2026
     return `${seqNum}/${code}/${monthRoman}/${year}`;
