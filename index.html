@@ -4,218 +4,577 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - Sistem Manajemen Surat</title>
-  <meta name="description" content="Sistem Manajemen Surat - Login untuk mengakses dashboard">
-
-  <!-- Styles -->
+  <title>Sistem Manajemen UKM Paduan Suara</title>
+  <meta name="description" content="Platform digital terpadu untuk pengelolaan administrasi UKM Paduan Suara">
   <link rel="stylesheet" href="styles/main.css">
+  <style>
+    :root {
+      --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --gradient-success: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
 
-  <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+      z-index: 1000;
+      padding: 1rem 0;
+    }
+
+    .navbar-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 1rem;
+    }
+
+    /* Hero Section */
+    .hero {
+      margin-top: 80px;
+      min-height: 90vh;
+      display: flex;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: var(--gradient-primary);
+      border-radius: 50%;
+      opacity: 0.1;
+      top: -250px;
+      right: -250px;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: var(--gradient-secondary);
+      border-radius: 50%;
+      opacity: 0.1;
+      bottom: -200px;
+      left: -200px;
+      animation: float 8s ease-in-out infinite reverse;
+    }
+
+    @keyframes float {
+
+      0%,
+      100% {
+        transform: translateY(0px);
+      }
+
+      50% {
+        transform: translateY(-20px);
+      }
+    }
+
+    .hero-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-text h1 {
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 1.5rem;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-text p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      margin-bottom: 2rem;
+      line-height: 1.6;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-hero {
+      padding: 1rem 2rem;
+      font-size: 1.125rem;
+      border-radius: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary-gradient {
+      background: var(--gradient-primary);
+      color: white;
+      border: none;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-primary-gradient:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-outline {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+
+    .btn-outline:hover {
+      background: #667eea;
+      color: white;
+      transform: translateY(-2px);
+    }
+
+    .hero-image {
+      position: relative;
+    }
+
+    .hero-card {
+      background: white;
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+      animation: cardFloat 3s ease-in-out infinite;
+    }
+
+    @keyframes cardFloat {
+
+      0%,
+      100% {
+        transform: translateY(0px);
+      }
+
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .stat-card {
+      text-align: center;
+      padding: 1rem;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      border-radius: 12px;
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 700;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-label {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* Features Section */
+    .features {
+      padding: 6rem 2rem;
+      background: white;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 700px;
+      margin: 0 auto 4rem;
+    }
+
+    .section-tag {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: var(--gradient-primary);
+      color: white;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .section-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .section-description {
+      font-size: 1.125rem;
+      color: var(--text-secondary);
+    }
+
+    .features-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+    }
+
+    .feature-card {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      border: 2px solid #f0f0f0;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: var(--gradient-primary);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s ease;
+    }
+
+    .feature-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      border-color: #667eea;
+    }
+
+    .feature-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-description {
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      padding: 6rem 2rem;
+      background: var(--gradient-primary);
+      color: white;
+      text-align: center;
+    }
+
+    .cta-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .cta-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .cta-description {
+      font-size: 1.25rem;
+      margin-bottom: 2rem;
+      opacity: 0.9;
+    }
+
+    .btn-cta {
+      background: white;
+      color: #667eea;
+      padding: 1rem 2.5rem;
+      font-size: 1.125rem;
+      border-radius: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+
+    .btn-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3);
+    }
+
+    /* Footer */
+    .footer {
+      background: #1a1a2e;
+      color: white;
+      padding: 3rem 2rem 1rem;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .footer-logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .footer-text {
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 2rem;
+    }
+
+    .footer-bottom {
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero-content {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+
+      .hero-text h1 {
+        font-size: 2.5rem;
+      }
+
+      .hero-image {
+        order: -1;
+      }
+
+      .navbar-content {
+        padding: 0 1rem;
+      }
+
+      .nav-buttons {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .nav-buttons .btn {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 
 <body>
-  <div class="page-wrapper">
-    <div class="main-content" style="display: flex; align-items: center; justify-content: center; padding: 2rem;">
-      <div class="container" style="max-width: 500px;">
-
-        <!-- Logo & Title -->
-        <div class="text-center mb-4">
-          <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
-          <h1
-            style="margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            Sistem Manajemen Surat
-          </h1>
-          <p class="text-secondary">Platform digital untuk pengelolaan surat dan dokumen</p>
-        </div>
-
-        <!-- Login Card -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Masuk ke Akun Anda</h3>
-          </div>
-
-          <div class="card-body">
-            <form id="login-form">
-              <div class="form-group">
-                <label class="form-label" for="email">Email</label>
-                <input type="email" class="form-control" id="email" name="email" placeholder="nama@email.com" required
-                  autocomplete="email">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="password">Password</label>
-                <input type="password" class="form-control" id="password" name="password"
-                  placeholder="Masukkan password" required autocomplete="current-password">
-              </div>
-
-              <button type="submit" class="btn btn-primary w-100 btn-lg">
-                Masuk
-              </button>
-            </form>
-
-            <div
-              style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--color-gray-200); text-align: center;">
-              <p class="text-secondary" style="margin-bottom: 0.5rem;">Belum punya akun?</p>
-              <button id="show-register" class="btn btn-secondary">
-                Daftar Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Register Card (Hidden by default) -->
-        <div class="card" id="register-card" style="display: none;">
-          <div class="card-header">
-            <h3 class="card-title">Daftar Akun Baru</h3>
-          </div>
-
-          <div class="card-body">
-            <form id="register-form">
-              <div class="form-group">
-                <label class="form-label" for="register-name">Nama Lengkap</label>
-                <input type="text" class="form-control" id="register-name" name="fullName"
-                  placeholder="Nama lengkap Anda" required>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="register-email">Email</label>
-                <input type="email" class="form-control" id="register-email" name="email" placeholder="nama@email.com"
-                  required autocomplete="email">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="register-password">Password</label>
-                <input type="password" class="form-control" id="register-password" name="password"
-                  placeholder="Minimal 6 karakter" required minlength="6" autocomplete="new-password">
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="register-role">Role</label>
-                <select class="form-control" id="register-role" name="role" required>
-                  <option value="anggota">Anggota</option>
-                  <option value="sekretaris">Sekretaris</option>
-                </select>
-                <small class="text-secondary">Pilih sesuai dengan posisi Anda</small>
-              </div>
-
-              <button type="submit" class="btn btn-primary w-100 btn-lg">
-                Daftar
-              </button>
-            </form>
-
-            <div
-              style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--color-gray-200); text-align: center;">
-              <p class="text-secondary" style="margin-bottom: 0.5rem;">Sudah punya akun?</p>
-              <button id="show-login" class="btn btn-secondary">
-                Masuk Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
-
-
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-content">
+      <div class="logo">
+        🎵 UKM Paduan Suara
+      </div>
+      <div class="nav-buttons">
+        <a href="#features" class="btn btn-secondary btn-sm">Fitur</a>
+        <a href="login.html" class="btn btn-primary btn-sm">Masuk</a>
       </div>
     </div>
-  </div>
+  </nav>
 
-  <!-- Scripts -->
-  <script src="js/config.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/auth.js"></script>
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-text">
+        <h1>Kelola UKM Paduan Suara Lebih Mudah</h1>
+        <p>Platform digital terpadu untuk administrasi dokumen, absensi anggota, dan rekap kehadiran. Semua dalam satu
+          sistem yang mudah dan efisien.</p>
+        <div class="hero-buttons">
+          <a href="login.html" class="btn-hero btn-primary-gradient">
+            🚀 Mulai Sekarang
+          </a>
+          <a href="attendance.html" class="btn-hero btn-outline">
+            📝 Isi Absensi
+          </a>
+        </div>
+      </div>
+      <div class="hero-image">
+        <div class="hero-card">
+          <h3 style="margin-bottom: 1rem;">📊 Dashboard Overview</h3>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-number">50+</div>
+              <div class="stat-label">Anggota Aktif</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number">100%</div>
+              <div class="stat-label">Digital</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number">24/7</div>
+              <div class="stat-label">Akses</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number">Mudah</div>
+              <div class="stat-label">Digunakan</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <script>
-    // Toggle between login and register forms
-    document.getElementById('show-register').addEventListener('click', () => {
-      document.getElementById('login-form').closest('.card').style.display = 'none';
-      document.getElementById('register-card').style.display = 'block';
-    });
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <div class="section-header">
+      <span class="section-tag">✨ Fitur Unggulan</span>
+      <h2 class="section-title">Semua yang Anda Butuhkan</h2>
+      <p class="section-description">
+        Sistem lengkap untuk mengelola administrasi UKM Paduan Suara dengan mudah dan efisien
+      </p>
+    </div>
 
-    document.getElementById('show-login').addEventListener('click', () => {
-      document.getElementById('register-card').style.display = 'none';
-      document.getElementById('login-form').closest('.card').style.display = 'block';
-    });
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📄</div>
+        <h3 class="feature-title">Manajemen Dokumen</h3>
+        <p class="feature-description">
+          Upload, review, dan validasi dokumen surat dengan sistem yang terorganisir. Sekretaris dapat mereview dan
+          memberikan feedback langsung.
+        </p>
+      </div>
 
-    // Handle login
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3 class="feature-title">Absensi Digital</h3>
+        <p class="feature-description">
+          Anggota dapat mengisi absensi tanpa login. Support untuk status hadir, sakit, dan izin dengan upload bukti
+          otomatis.
+        </p>
+      </div>
 
-      const formData = new FormData(e.target);
-      const email = formData.get('email');
-      const password = formData.get('password');
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3 class="feature-title">Manajemen Anggota</h3>
+        <p class="feature-description">
+          Kelola data anggota lengkap dengan prodi, jurusan, dan tipe suara. Support import massal via CSV untuk
+          efisiensi.
+        </p>
+      </div>
 
-      try {
-        showLoading('Memproses login...');
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3 class="feature-title">Rekap Kehadiran</h3>
+        <p class="feature-description">
+          Buat rekap kehadiran per periode dengan statistik lengkap. Export ke CSV untuk laporan atau analisis lebih
+          lanjut.
+        </p>
+      </div>
 
-        await auth.signIn(email, password);
+      <div class="feature-card">
+        <div class="feature-icon">🎵</div>
+        <h3 class="feature-title">Khusus Paduan Suara</h3>
+        <p class="feature-description">
+          Fitur spesial untuk paduan suara: klasifikasi suara (Soprano, Alto, Tenor, Bass) dengan badge berwarna yang
+          menarik.
+        </p>
+      </div>
 
-        hideLoading();
-        toast.success('Login berhasil!');
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3 class="feature-title">Cepat & Responsif</h3>
+        <p class="feature-description">
+          Interface modern yang cepat dan mudah digunakan di semua perangkat. Desain responsive untuk mobile dan
+          desktop.
+        </p>
+      </div>
+    </div>
+  </section>
 
-        // Redirect based on role
-        setTimeout(() => {
-          if (auth.isAnggota()) {
-            window.location.href = 'member-dashboard.html';
-          } else if (auth.isSekretaris()) {
-            window.location.href = 'secretary-dashboard.html';
-          } else {
-            window.location.href = 'member-dashboard.html'; // Default
-          }
-        }, 1000);
-      } catch (error) {
-        hideLoading();
-        toast.error(error.message || 'Login gagal. Periksa email dan password Anda.');
-      }
-    });
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <div class="cta-content">
+      <h2 class="cta-title">Siap Mengoptimalkan Administrasi UKM Anda?</h2>
+      <p class="cta-description">
+        Bergabunglah dengan sistem manajemen yang memudahkan pengelolaan dokumen dan kehadiran anggota
+      </p>
+      <a href="login.html" class="btn-cta">Mulai Sekarang →</a>
+    </div>
+  </section>
 
-    // Handle registration
-    document.getElementById('register-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const formData = new FormData(e.target);
-      const fullName = formData.get('fullName');
-      const email = formData.get('email');
-      const password = formData.get('password');
-      const role = formData.get('role');
-
-      try {
-        showLoading('Membuat akun...');
-
-        await auth.signUp(email, password, fullName, role);
-
-        hideLoading();
-        toast.success('Akun berhasil dibuat! Silakan cek email untuk verifikasi.');
-
-        // Switch back to login form
-        setTimeout(() => {
-          document.getElementById('register-card').style.display = 'none';
-          document.getElementById('login-form').closest('.card').style.display = 'block';
-          e.target.reset();
-        }, 2000);
-      } catch (error) {
-        hideLoading();
-        toast.error(error.message || 'Registrasi gagal. Coba lagi.');
-      }
-    });
-
-    // Check if already logged in
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const session = await auth.getSession();
-
-        if (session && auth.getCurrentUser()) {
-          // Already logged in, redirect to dashboard
-          if (auth.isAnggota()) {
-            window.location.href = 'member-dashboard.html';
-          } else if (auth.isSekretaris()) {
-            window.location.href = 'secretary-dashboard.html';
-          }
-        }
-      } catch (error) {
-        console.error('Error checking session:', error);
-      }
-    });
-  </script>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-logo">🎵 UKM Paduan Suara</div>
+      <p class="footer-text">
+        Platform digital untuk pengelolaan administrasi UKM Paduan Suara<br>
+        Mudah, Cepat, dan Efisien
+      </p>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Sistem Manajemen UKM. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
 </body>
 
 </html>

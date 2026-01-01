@@ -163,7 +163,7 @@ class AuthManager {
             this.currentUser = null;
 
             // Redirect to login
-            window.location.href = '/index.html';
+            window.location.href = '/login.html';
         } catch (error) {
             console.error('Error signing out:', error);
             throw error;
@@ -210,7 +210,7 @@ class AuthManager {
 
         if (!session) {
             // Redirect to login
-            window.location.href = '/index.html';
+            window.location.href = '/login.html';
             throw new Error('Authentication required');
         }
 
@@ -229,7 +229,7 @@ class AuthManager {
             } else if (this.isSekretaris()) {
                 window.location.href = '/secretary-dashboard.html';
             } else {
-                window.location.href = '/index.html';
+                window.location.href = '/login.html';
             }
 
             throw new Error('Insufficient permissions');

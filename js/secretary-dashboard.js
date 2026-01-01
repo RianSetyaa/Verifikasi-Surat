@@ -1,30 +1,38 @@
 // Secretary Dashboard JavaScript
 
+// State
 let currentDocument = null;
 let currentFilters = {
-    status: 'pending',
-    type: ''
+    docStatus: 'pending',
+    docType: ''
 };
+let currentMemberId = null; // For editing
 
 // Initialize dashboard
 async function initDashboard() {
     try {
-        // Check authentication
         await auth.requireAuth();
         await auth.requireRole('sekretaris');
 
-        // Display user info
         displayUserInfo();
 
-        // Load initial data
+        // Initial Load (Documents tab is active by default)
         await loadStats();
         await loadDocuments();
 
-        // Setup event listeners
+        // Setup all listeners
         setupEventListeners();
-
-        // Setup real-time subscriptions
         setupRealtimeSubscription();
+
+        // Set default date for attendance filter
+        document.getElementById('attendance-date-filter').valueAsDate = new Date();
+
+        // Set default date range for recap (current month)
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        document.getElementById('recap-date-from').valueAsDate = firstDay;
+        document.getElementById('recap-date-to').valueAsDate = today;
+
     } catch (error) {
         console.error('Error initializing dashboard:', error);
         toast.error('Gagal memuat dashboard');
@@ -48,100 +56,106 @@ function setupEventListeners() {
         }
     });
 
-    // Filter buttons
-    document.getElementById('apply-filter-btn').addEventListener('click', applyFilters);
+    // --- Tab Navigation ---
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active class from all
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Add active class to clicked
+            btn.classList.add('active');
+            const tabId = btn.getAttribute('data-tab');
+            document.getElementById(`section-${tabId}`).classList.add('active');
+
+            // Lazy load data
+            if (tabId === 'attendance') loadAttendanceLogs();
+            if (tabId === 'members') loadMembers();
+        });
+    });
+
+    // --- Documents Tab ---
+    document.getElementById('apply-filter-btn').addEventListener('click', () => {
+        currentFilters.docStatus = document.getElementById('filter-status').value;
+        currentFilters.docType = document.getElementById('filter-type').value;
+        loadDocuments();
+    });
+
     document.getElementById('refresh-btn').addEventListener('click', () => {
         loadStats();
         loadDocuments();
     });
 
-    // Review modal
+    // Validations & Review
     document.getElementById('close-review-modal').addEventListener('click', closeReviewModal);
     document.getElementById('cancel-review-btn').addEventListener('click', closeReviewModal);
     document.getElementById('request-revision-btn').addEventListener('click', showRevisionNoteModal);
     document.getElementById('validate-btn').addEventListener('click', validateDocument);
 
-    // Revision note modal
     document.getElementById('close-revision-note-modal').addEventListener('click', closeRevisionNoteModal);
     document.getElementById('cancel-revision-note-btn').addEventListener('click', closeRevisionNoteModal);
     document.getElementById('submit-revision-btn').addEventListener('click', submitRevision);
 
-    // Modal click outside
-    document.getElementById('review-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'review-modal') closeReviewModal();
-    });
+    // --- Attendance Tab ---
+    document.getElementById('attendance-filter-btn').addEventListener('click', loadAttendanceLogs);
 
-    document.getElementById('revision-note-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'revision-note-modal') closeRevisionNoteModal();
+    // --- Members Tab ---
+    document.getElementById('btn-add-member').addEventListener('click', () => openMemberModal());
+    document.getElementById('close-member-modal').addEventListener('click', closeMemberModal);
+    document.getElementById('cancel-member-btn').addEventListener('click', closeMemberModal);
+    document.getElementById('save-member-btn').addEventListener('click', saveMember);
+    document.getElementById('btn-download-template').addEventListener('click', downloadMemberTemplate);
+    document.getElementById('btn-import-members').addEventListener('click', () => {
+        document.getElementById('csv-file-input').click();
     });
+    document.getElementById('csv-file-input').addEventListener('change', handleCSVImport);
+
+    // --- Recap Tab ---
+    document.getElementById('recap-generate-btn').addEventListener('click', generateRecap);
+    document.getElementById('recap-export-btn').addEventListener('click', exportRecapToCSV);
 }
 
-// Apply filters
-function applyFilters() {
-    currentFilters.status = document.getElementById('filter-status').value;
-    currentFilters.type = document.getElementById('filter-type').value;
-    loadDocuments();
-}
+// ==========================================
+// DOCUMENTS LOGIC
+// ==========================================
 
-// Load statistics
 async function loadStats() {
     try {
-        const { data, error } = await auth.supabase
-            .from('documents')
-            .select('status');
-
+        const { data, error } = await auth.supabase.from('documents').select('status');
         if (error) throw error;
 
-        const stats = {
-            pending: 0,
-            revision: 0,
-            validated: 0
-        };
-
-        data.forEach(doc => {
-            stats[doc.status]++;
-        });
+        const stats = { pending: 0, revision: 0, validated: 0 };
+        data.forEach(doc => { if (stats[doc.status] !== undefined) stats[doc.status]++; });
 
         document.getElementById('pending-count').textContent = stats.pending;
         document.getElementById('revision-count').textContent = stats.revision;
         document.getElementById('validated-count').textContent = stats.validated;
     } catch (error) {
-        console.error('Error loading stats:', error);
+        console.error('Error stats:', error);
     }
 }
 
-// Load documents
 async function loadDocuments() {
     try {
-        let query = auth.supabase
-            .from('documents')
-            .select('*')
-            .order('created_at', { ascending: false });
+        showLoading('Memuat dokumen...');
+        let query = auth.supabase.from('documents').select('*').order('created_at', { ascending: false });
 
-        // Apply filters
-        if (currentFilters.status) {
-            query = query.eq('status', currentFilters.status);
-        }
+        if (currentFilters.docStatus) query = query.eq('status', currentFilters.docStatus);
+        if (currentFilters.docType) query = query.eq('document_type', currentFilters.docType);
 
-        if (currentFilters.type) {
-            query = query.eq('document_type', currentFilters.type);
-        }
+        const { data, error } = await query;
+        if (error) throw error;
 
-        const { data: documents, error } = await query;
-
-        if (error) {
-            console.error('Error loading documents:', error);
-            throw error;
-        }
-
-        displayDocuments(documents || []);
+        displayDocuments(data || []);
     } catch (error) {
-        console.error('Error loading documents:', error);
+        console.error('Error docs:', error);
         toast.error('Gagal memuat dokumen');
+    } finally {
+        hideLoading();
     }
 }
 
-// Display documents in table
 function displayDocuments(documents) {
     const emptyState = document.getElementById('documents-empty');
     const tableContainer = document.getElementById('documents-table-container');
@@ -157,339 +171,685 @@ function displayDocuments(documents) {
     tableContainer.style.display = 'block';
 
     tbody.innerHTML = documents.map(doc => `
-    <tr>
-      <td>
-        <div style="font-weight: 600;">${doc.title}</div>
-        ${doc.description ? `<div class="text-secondary" style="font-size: 0.875rem;">${truncate(doc.description, 60)}</div>` : ''}
-      </td>
-      <td>${renderDocumentType(doc.document_type)}</td>
-      <td>
-        <div style="font-weight: 500;">${doc.uploader_name || 'Tidak diketahui'}</div>
-      </td>
-      <td>${renderStatusBadge(doc.status)}</td>
-      <td>${formatDateShort(doc.submitted_at)}</td>
-      <td>${doc.document_number || '-'}</td>
-      <td>
-        <div class="d-flex gap-1">
-          <a href="${doc.file_url}" target="_blank" class="btn btn-sm btn-secondary" title="Lihat File">👁️</a>
-          <button class="btn btn-sm btn-primary" onclick="reviewDocument('${doc.id}')" title="Review">📝</button>
-          ${doc.status === 'validated' && doc.document_number ? `
-            <button class="btn btn-sm btn-success" onclick="downloadDocument('${doc.id}')" title="Download Surat">⬇️</button>
-          ` : ''}
-        </div>
-      </td>
-    </tr>
-  `).join('');
+        <tr>
+            <td>
+                <div style="font-weight: 600;">${doc.title}</div>
+                ${doc.description ? `<div class="text-secondary" style="font-size: 0.875rem;">${truncate(doc.description, 60)}</div>` : ''}
+            </td>
+            <td>${renderDocumentType(doc.document_type)}</td>
+            <td><div style="font-weight: 500;">${doc.uploader_name || 'Tidak diketahui'}</div></td>
+            <td>${renderStatusBadge(doc.status)}</td>
+            <td>${formatDateShort(doc.submitted_at)}</td>
+            <td>${doc.document_number || '-'}</td>
+            <td>
+                <div class="d-flex gap-1">
+                    <a href="${doc.file_url}" target="_blank" class="btn btn-sm btn-secondary" title="Lihat">👁️</a>
+                    <button class="btn btn-sm btn-primary" onclick="reviewDocument('${doc.id}')" title="Review">📝</button>
+                    ${doc.status === 'validated' && doc.document_number ? `
+                        <button class="btn btn-sm btn-success" onclick="downloadDocument('${doc.id}')" title="Download">⬇️</button>
+                    ` : ''}
+                </div>
+            </td>
+        </tr>
+    `).join('');
 }
 
-// Review document
+// Review functions (mostly same as before)
 async function reviewDocument(documentId) {
     try {
-        showLoading('Memuat dokumen...');
-
+        showLoading('Memuat detail...');
         const { data, error } = await auth.supabase
             .from('documents')
-            .select(`
-                *,
-                uploaded_by:users!documents_uploaded_by_fkey(full_name, email),
-                revisions:document_revisions(
-                    *,
-                    created_by:users!document_revisions_created_by_fkey(full_name)
-                )
-            `)
-            .eq('id', documentId)
-            .single();
+            .select(`*, uploaded_by:users!documents_uploaded_by_fkey(full_name, email), revisions:document_revisions(*, created_by:users!document_revisions_created_by_fkey(full_name))`)
+            .eq('id', documentId).single();
 
         if (error) throw error;
-
         currentDocument = data;
-
         hideLoading();
 
-        // Display document details
+        // Build Modal HTML (Condensed)
         const modalContent = document.getElementById('review-content');
         modalContent.innerHTML = `
-      <div style="padding: 1rem; background: var(--color-gray-50); border-radius: var(--radius-md); margin-bottom: 1.5rem;">
-        <h4 style="margin-bottom: 1rem;">${data.title}</h4>
-        
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
-          <div>
-            <div class="text-secondary" style="font-size: 0.875rem;">Jenis Dokumen</div>
-            <div style="font-weight: 500;">${renderDocumentType(data.document_type)}</div>
-          </div>
-          
-          <div>
-            <div class="text-secondary" style="font-size: 0.875rem;">Status</div>
-            <div>${renderStatusBadge(data.status)}</div>
-          </div>
-          
-          <div>
-            <div class="text-secondary" style="font-size: 0.875rem;">Pengunggah</div>
-            <div style="font-weight: 500;">${data.uploaded_by?.full_name || 'Unknown'}</div>
-            <div style="font-size: 0.75rem;">${data.uploaded_by?.email || ''}</div>
-          </div>
-          
-          <div>
-            <div class="text-secondary" style="font-size: 0.875rem;">Tanggal Upload</div>
-            <div style="font-weight: 500;">${formatDate(data.submitted_at)}</div>
-          </div>
-        </div>
-
-        ${data.description ? `
-          <div style="margin-bottom: 1rem;">
-            <div class="text-secondary" style="font-size: 0.875rem; margin-bottom: 0.5rem;">Deskripsi</div>
-            <div style="white-space: pre-wrap;">${data.description}</div>
-          </div>
-        ` : ''}
-
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          <a href="${data.file_url}" target="_blank" class="btn btn-primary btn-sm">
-            📄 Buka File Dokumen
-          </a>
-          ${data.status === 'validated' && data.document_number ? `
-            <button onclick="downloadDocument('${data.id}')" class="btn btn-success btn-sm">
-              ⬇️ Download Surat
-            </button>
-          ` : ''}
-        </div>
-      </div>
-
-      ${data.revisions && data.revisions.length > 0 ? `
-        <div style="margin-bottom: 1.5rem;">
-          <h4 style="margin-bottom: 0.75rem;">Riwayat Revisi</h4>
-          ${data.revisions.map(rev => `
-            <div style="padding: 1rem; background: var(--color-gray-50); border-radius: var(--radius-md); margin-bottom: 0.75rem; border-left: 4px solid var(--color-warning);">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <strong>${rev.created_by?.full_name || 'Sekretaris'}</strong>
-                <span class="text-secondary" style="font-size: 0.875rem;">${formatDate(rev.created_at)}</span>
-              </div>
-              <p style="margin: 0; white-space: pre-wrap;">${rev.revision_note}</p>
+            <div style="padding: 1rem; background: var(--color-gray-50); border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 1rem;">${data.title}</h4>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                    <div><div class="text-secondary small">Jenis</div><div>${renderDocumentType(data.document_type)}</div></div>
+                    <div><div class="text-secondary small">Status</div><div>${renderStatusBadge(data.status)}</div></div>
+                    <div><div class="text-secondary small">Pengunggah</div><div>${data.uploaded_by?.full_name || 'Unknown'}</div></div>
+                    <div><div class="text-secondary small">Tanggal</div><div>${formatDate(data.submitted_at)}</div></div>
+                </div>
+                ${data.description ? `<div style="margin-bottom: 1rem;"><div class="text-secondary small">Deskripsi</div><div>${data.description}</div></div>` : ''}
+                <div class="d-flex gap-1">
+                    <a href="${data.file_url}" target="_blank" class="btn btn-primary btn-sm">📄 Buka File</a>
+                </div>
             </div>
-          `).join('')}
-        </div>
-      ` : ''}
+            ${data.revisions?.length > 0 ? `
+                <div style="margin-bottom: 1.5rem;"><h4>Riwayat Revisi</h4>
+                ${data.revisions.map(rev => `<div style="padding:0.5rem; background:#fff; border-left:3px solid orange; margin-bottom:0.5rem;"><small>${formatDate(rev.created_at)}</small><p class="m-0">${rev.revision_note}</p></div>`).join('')}
+                </div>` : ''}
+        `;
 
-      ${data.document_number ? `
-        <div style="padding: 1rem; background: var(--color-success); color: white; border-radius: var(--radius-md); text-align: center;">
-          <div style="font-size: 0.875rem; opacity: 0.9;">Nomor Surat</div>
-          <div style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem;">${data.document_number}</div>
-        </div>
-      ` : ''}
-    `;
-
-        // Show/hide action buttons based on status
-        const validateBtn = document.getElementById('validate-btn');
-        const revisionBtn = document.getElementById('request-revision-btn');
-
-        if (data.status === 'validated') {
-            validateBtn.style.display = 'none';
-            revisionBtn.style.display = 'none';
-        } else {
-            validateBtn.style.display = 'inline-flex';
-            revisionBtn.style.display = 'inline-flex';
-        }
+        // Toggle buttons
+        const isVal = data.status === 'validated';
+        document.getElementById('validate-btn').style.display = isVal ? 'none' : 'inline-flex';
+        document.getElementById('request-revision-btn').style.display = isVal ? 'none' : 'inline-flex';
 
         document.getElementById('review-modal').classList.add('show');
-    } catch (error) {
-        hideLoading();
-        console.error('Error loading document:', error);
+    } catch (e) {
+        console.error(e);
         toast.error('Gagal memuat dokumen');
+        hideLoading();
     }
 }
 
-// Close review modal
 function closeReviewModal() {
     document.getElementById('review-modal').classList.remove('show');
     currentDocument = null;
 }
 
-// Show revision note modal
 function showRevisionNoteModal() {
     document.getElementById('review-modal').classList.remove('show');
     document.getElementById('revision-note').value = '';
     document.getElementById('revision-note-modal').classList.add('show');
 }
 
-// Close revision note modal
 function closeRevisionNoteModal() {
     document.getElementById('revision-note-modal').classList.remove('show');
     document.getElementById('review-modal').classList.add('show');
 }
 
-// Submit revision
 async function submitRevision() {
     if (!currentDocument) return;
-
-    const revisionNote = document.getElementById('revision-note').value.trim();
-
-    if (!revisionNote) {
-        toast.warning('Masukkan catatan revisi');
-        return;
-    }
+    const note = document.getElementById('revision-note').value.trim();
+    if (!note) return toast.warning('Isi catatan revisi');
 
     try {
-        showLoading('Mengirim catatan revisi...');
-
+        showLoading('Mengirim revisi...');
         const user = auth.getCurrentUser();
 
-        // Insert revision note
-        const { error: revisionError } = await auth.supabase
-            .from('document_revisions')
-            .insert([
-                {
-                    document_id: currentDocument.id,
-                    revision_note: revisionNote,
-                    created_by: user.id
-                }
-            ]);
+        await auth.supabase.from('document_revisions').insert([{
+            document_id: currentDocument.id,
+            revision_note: note,
+            created_by: user.id
+        }]);
 
-        if (revisionError) throw revisionError;
-
-        // Update document status
-        const { error: updateError } = await auth.supabase
-            .from('documents')
-            .update({
-                status: 'revision',
-                reviewed_at: new Date().toISOString(),
-                reviewed_by: user.id
-            })
-            .eq('id', currentDocument.id);
-
-        if (updateError) throw updateError;
+        await auth.supabase.from('documents').update({
+            status: 'revision',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id
+        }).eq('id', currentDocument.id);
 
         hideLoading();
-        toast.success('Catatan revisi berhasil dikirim');
-
+        toast.success('Revisi terkirim');
         closeRevisionNoteModal();
         closeReviewModal();
-
-        // Reload data
-        await loadStats();
-        await loadDocuments();
-    } catch (error) {
+        loadStats();
+        loadDocuments();
+    } catch (e) {
+        console.error(e);
         hideLoading();
-        console.error('Error submitting revision:', error);
-        toast.error('Gagal mengirim catatan revisi');
+        toast.error('Gagal mengirim revisi');
     }
 }
 
-// Validate document
 async function validateDocument() {
     if (!currentDocument) return;
-
-    const confirmed = await confirm(
-        'Validasi dokumen ini? Nomor surat akan digenerate otomatis.',
-        'Konfirmasi Validasi'
-    );
-
-    if (!confirmed) return;
+    if (!await confirm('Validasi dokumen ini?')) return;
 
     try {
-        showLoading('Memvalidasi dokumen...');
-
+        showLoading('Memvalidasi...');
         const user = auth.getCurrentUser();
 
-        // Get document count for numbering
-        const { count } = await auth.supabase
-            .from('documents')
+        // Count for number
+        const { count } = await auth.supabase.from('documents')
             .select('*', { count: 'exact', head: true })
             .eq('document_type', currentDocument.document_type)
             .eq('status', 'validated');
 
-        // Generate document number
-        const documentNumber = generateDocumentNumber(
-            currentDocument.document_type,
-            (count || 0) + 1
-        );
+        const docNum = generateDocumentNumber(currentDocument.document_type, (count || 0) + 1);
 
-        // Update document
-        const { error } = await auth.supabase
-            .from('documents')
-            .update({
-                status: 'validated',
-                document_number: documentNumber,
-                reviewed_at: new Date().toISOString(),
-                reviewed_by: user.id
-            })
-            .eq('id', currentDocument.id);
-
-        if (error) throw error;
+        await auth.supabase.from('documents').update({
+            status: 'validated',
+            document_number: docNum,
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id
+        }).eq('id', currentDocument.id);
 
         hideLoading();
-        toast.success(`Dokumen berhasil divalidasi! Nomor: ${documentNumber}`);
-
+        toast.success('Dokumen divalidasi!');
         closeReviewModal();
-
-        // Reload data
-        await loadStats();
-        await loadDocuments();
-    } catch (error) {
+        loadStats();
+        loadDocuments();
+    } catch (e) {
+        console.error(e);
         hideLoading();
-        console.error('Error validating document:', error);
-        toast.error('Gagal memvalidasi dokumen');
+        toast.error('Gagal validasi');
     }
 }
 
-// Download verified document
-async function downloadDocument(documentId) {
+async function downloadDocument(docId) {
     try {
-        showLoading('Memuat dokumen...');
+        const { data } = await auth.supabase.from('documents').select('*').eq('id', docId).single();
+        if (data) await utils.downloadVerifiedDocument(data.file_url, data.document_number, data.title, data.document_type);
+    } catch (e) { console.error(e); toast.error('Gagal download'); }
+}
+
+
+// ==========================================
+// ATTENDANCE LOGIC
+// ==========================================
+
+async function loadAttendanceLogs() {
+    const dateInput = document.getElementById('attendance-date-filter');
+    const date = dateInput.value; // YYYY-MM-DD
+
+    if (!date) return;
+
+    try {
+        showLoading('Memuat absensi...');
+
+        // Date range for query
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
 
         const { data, error } = await auth.supabase
-            .from('documents')
-            .select('file_url, document_number, title, document_type, status')
-            .eq('id', documentId)
-            .single();
+            .from('attendance_logs')
+            .select(`
+                *,
+                member:ukm_members(full_name)
+            `)
+            .gte('created_at', startOfDay.toISOString())
+            .lte('created_at', endOfDay.toISOString())
+            .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // Check if document is validated
-        if (data.status !== 'validated' || !data.document_number) {
-            hideLoading();
-            toast.warning('Hanya dokumen yang sudah tervalidasi yang dapat diunduh');
+        // Calculate Summary
+        const summary = { hadir: 0, sakit: 0, izin: 0, alpha: 0 };
+        data.forEach(log => {
+            if (summary[log.status] !== undefined) summary[log.status]++;
+        });
+        document.getElementById('attendance-summary-text').textContent =
+            `Total: ${data.length} | Hadir: ${summary.hadir} | Izin: ${summary.izin} | Sakit: ${summary.sakit}`;
+
+        // Render Table
+        const tbody = document.getElementById('attendance-tbody');
+        const emptyState = document.getElementById('attendance-empty');
+
+        if (data.length === 0) {
+            tbody.innerHTML = '';
+            emptyState.style.display = 'block';
+        } else {
+            emptyState.style.display = 'none';
+            tbody.innerHTML = data.map(log => `
+                <tr>
+                    <td><div style="font-weight: 500;">${log.member?.full_name || 'Unknown'}</div></td>
+                    <td>${new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>
+                        <span class="badge" style="background: ${getStatusColor(log.status)}; color: white;">
+                            ${log.status.toUpperCase()}
+                        </span>
+                    </td>
+                    <td>${log.reason || '-'}</td>
+                    <td>
+                        ${log.proof_url ? `<a href="${log.proof_url}" target="_blank" class="btn btn-sm btn-secondary">Bukti</a>` : '-'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+    } catch (error) {
+        console.error('Error loading attendance:', error);
+        toast.error('Gagal memuat absensi');
+    } finally {
+        hideLoading();
+    }
+}
+
+function getStatusColor(status) {
+    switch (status) {
+        case 'hadir': return 'var(--color-success)';
+        case 'sakit': return 'var(--color-danger)';
+        case 'izin': return 'var(--color-warning)';
+        default: return 'var(--color-gray-400)';
+    }
+}
+
+// ==========================================
+// MEMBERS MANGEMENT LOGIC
+// ==========================================
+
+async function loadMembers() {
+    try {
+        showLoading('Memuat anggota...');
+        const { data, error } = await auth.supabase
+            .from('ukm_members')
+            .select('*')
+            .order('full_name');
+
+        if (error) throw error;
+
+        const tbody = document.getElementById('members-tbody');
+        tbody.innerHTML = data.map(member => `
+            <tr>
+                <td><div style="font-weight: 500;">${member.full_name}</div></td>
+                <td>${member.nim || '-'}</td>
+                <td>${member.prodi || '-'}</td>
+                <td>
+                    ${member.voice_type ? `<span class="badge" style="background: ${getVoiceColor(member.voice_type)}; color: white;">${member.voice_type}</span>` : '-'}
+                </td>
+                <td>${member.position}</td>
+                <td>
+                    <span class="badge" style="background: ${member.is_active ? 'var(--color-success)' : 'var(--color-gray-400)'}; color: white;">
+                        ${member.is_active ? 'Aktif' : 'Non-Aktif'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="editMember('${member.id}')">✏️ Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="toggleMemberStatus('${member.id}', ${member.is_active})">
+                        ${member.is_active ? '🚫 Nonaktifkan' : '✅ Aktifkan'}
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error loading members:', error);
+        toast.error('Gagal memuat daftar anggota');
+    } finally {
+        hideLoading();
+    }
+}
+
+function openMemberModal(member = null) {
+    const modal = document.getElementById('member-modal');
+    const title = document.getElementById('member-modal-title');
+    currentMemberId = member ? member.id : null;
+
+    if (member) {
+        title.textContent = 'Edit Anggota';
+        document.getElementById('member-name').value = member.full_name;
+        document.getElementById('member-nim').value = member.nim || '';
+        document.getElementById('member-prodi').value = member.prodi || '';
+        document.getElementById('member-jurusan').value = member.jurusan || '';
+        document.getElementById('member-voice-type').value = member.voice_type || '';
+        document.getElementById('member-position').value = member.position || 'Anggota';
+        // Radio logic
+        const radios = document.getElementsByName('member-active');
+        if (member.is_active) radios[0].checked = true;
+        else radios[1].checked = true;
+    } else {
+        title.textContent = 'Tambah Anggota';
+        document.getElementById('member-form').reset();
+        document.getElementsByName('member-active')[0].checked = true;
+    }
+
+    modal.classList.add('show');
+}
+
+function closeMemberModal() {
+    document.getElementById('member-modal').classList.remove('show');
+    currentMemberId = null;
+}
+
+async function editMember(id) {
+    try {
+        const { data, error } = await auth.supabase.from('ukm_members').select('*').eq('id', id).single();
+        if (data) openMemberModal(data);
+    } catch (e) { console.error(e); }
+}
+
+function getVoiceColor(voiceType) {
+    switch (voiceType) {
+        case 'Soprano': return 'hsl(280, 70%, 60%)';
+        case 'Alto': return 'hsl(340, 70%, 60%)';
+        case 'Tenor': return 'hsl(200, 70%, 50%)';
+        case 'Bass': return 'hsl(20, 70%, 50%)';
+        default: return 'var(--color-gray-400)';
+    }
+}
+
+async function saveMember() {
+    const name = document.getElementById('member-name').value.trim();
+    const nim = document.getElementById('member-nim').value.trim();
+    const prodi = document.getElementById('member-prodi').value.trim();
+    const jurusan = document.getElementById('member-jurusan').value.trim();
+    const voiceType = document.getElementById('member-voice-type').value;
+    const position = document.getElementById('member-position').value;
+    const isActive = document.querySelector('input[name="member-active"]:checked').value === 'true';
+
+    if (!name) return toast.warning('Nama wajib diisi');
+
+    try {
+        showLoading('Menyimpan...');
+
+        const payload = {
+            full_name: name,
+            nim: nim || null,
+            prodi: prodi || null,
+            jurusan: jurusan || null,
+            voice_type: voiceType || null,
+            position: position,
+            is_active: isActive
+        };
+
+        let error;
+        if (currentMemberId) {
+            // Update
+            const res = await auth.supabase.from('ukm_members').update(payload).eq('id', currentMemberId);
+            error = res.error;
+        } else {
+            // Insert
+            const res = await auth.supabase.from('ukm_members').insert([payload]);
+            error = res.error;
+        }
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success('Data anggota berhasil disimpan');
+        closeMemberModal();
+        loadMembers();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error save member:', error);
+        toast.error('Gagal menyimpan data');
+    }
+}
+
+async function toggleMemberStatus(id, currentStatus) {
+    if (!await confirm(`Yakin ingin mengubah status anggota ini?`)) return;
+
+    try {
+        const { error } = await auth.supabase
+            .from('ukm_members')
+            .update({ is_active: !currentStatus })
+            .eq('id', id);
+
+        if (error) throw error;
+        toast.success('Status berhasil diubah');
+        loadMembers();
+    } catch (e) {
+        console.error(e);
+        toast.error('Gagal update status');
+    }
+}
+
+// Download CSV Template
+function downloadMemberTemplate() {
+    const headers = ['Nama Lengkap', 'NIM', 'Prodi', 'Jurusan', 'Tipe Suara', 'Jabatan'];
+    const exampleRow = ['Budi Santoso', '123456789', 'Teknik Informatika', 'Fakultas Teknik', 'Tenor', 'Anggota'];
+
+    const csvContent = headers.join(',') + '\n' + exampleRow.join(',');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Template_Anggota_UKM.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success('Template berhasil diunduh');
+}
+
+// Handle CSV Import
+async function handleCSVImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    event.target.value = '';
+
+    if (!file.name.endsWith('.csv')) {
+        return toast.error('File harus berformat CSV');
+    }
+
+    try {
+        // Parse CSV first (no loading yet)
+
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+
+        if (lines.length < 2) {
+            return toast.error('File CSV kosong atau tidak valid');
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const rows = lines.slice(1);
+
+        const expectedHeaders = ['Nama Lengkap', 'NIM', 'Prodi', 'Jurusan', 'Tipe Suara', 'Jabatan'];
+
+        const headersMatch = expectedHeaders.every((eh, i) => headers[i] && headers[i].includes(eh));
+        if (!headersMatch) {
+            return toast.error('Format CSV tidak sesuai template. Gunakan template yang sudah disediakan.');
+        }
+
+        const members = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i].split(',').map(cell => cell.trim());
+
+            if (!row[0]) continue;
+
+            members.push({
+                full_name: row[0] || null,
+                nim: row[1] || null,
+                prodi: row[2] || null,
+                jurusan: row[3] || null,
+                voice_type: row[4] || null,
+                position: row[5] || 'Anggota',
+                is_active: true
+            });
+        }
+
+        if (members.length === 0) {
+            return toast.error('Tidak ada data valid untuk diimport');
+        }
+
+        const confirmed = await confirm(
+            `Import ${members.length} anggota ke database?`
+        );
+
+        if (!confirmed) {
             return;
         }
 
-        hideLoading();
+        showLoading(`Mengimport ${members.length} anggota...`);
 
-        // Use utility function to download
-        await downloadVerifiedDocument(
-            data.file_url,
-            data.document_number,
-            data.title,
-            data.document_type
-        );
+        const { data, error } = await auth.supabase
+            .from('ukm_members')
+            .insert(members)
+            .select();
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success(`Berhasil mengimport ${data.length} anggota!`);
+
+        loadMembers();
+
     } catch (error) {
         hideLoading();
-        console.error('Error downloading document:', error);
-        toast.error('Gagal mengunduh dokumen');
+        console.error('Error importing CSV:', error);
+        toast.error('Gagal mengimport data. Periksa format file CSV.');
     }
 }
 
-// Setup real-time subscription for live updates
+// ==========================================
+// ATTENDANCE RECAP LOGIC
+// ==========================================
+
+async function generateRecap() {
+    const dateFrom = document.getElementById('recap-date-from').value;
+    const dateTo = document.getElementById('recap-date-to').value;
+
+    if (!dateFrom || !dateTo) {
+        return toast.warning('Pilih periode tanggal terlebih dahulu');
+    }
+
+    if (new Date(dateFrom) > new Date(dateTo)) {
+        return toast.error('Tanggal awal tidak boleh lebih besar dari tanggal akhir');
+    }
+
+    try {
+        showLoading('Membuat rekap...');
+
+        // Fetch all active members
+        const { data: members, error: membersError } = await auth.supabase
+            .from('ukm_members')
+            .select('id, full_name, nim')
+            .eq('is_active', true)
+            .order('full_name');
+
+        if (membersError) throw membersError;
+
+        // Fetch attendance logs in period
+        const startDate = new Date(dateFrom);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+
+        const { data: logs, error: logsError } = await auth.supabase
+            .from('attendance_logs')
+            .select('member_id, status, created_at')
+            .gte('created_at', startDate.toISOString())
+            .lte('created_at', endDate.toISOString());
+
+        if (logsError) throw logsError;
+
+        // Calculate statistics per member
+        const recapData = members.map((member, index) => {
+            const memberLogs = logs.filter(log => log.member_id === member.id);
+
+            const stats = {
+                hadir: memberLogs.filter(l => l.status === 'hadir').length,
+                sakit: memberLogs.filter(l => l.status === 'sakit').length,
+                izin: memberLogs.filter(l => l.status === 'izin').length
+            };
+
+            const total = stats.hadir + stats.sakit + stats.izin;
+            const percentage = total > 0 ? ((stats.hadir / total) * 100).toFixed(1) : 0;
+
+            return {
+                no: index + 1,
+                id: member.id,
+                name: member.full_name,
+                nim: member.nim || '-',
+                hadir: stats.hadir,
+                sakit: stats.sakit,
+                izin: stats.izin,
+                total: total,
+                percentage: percentage
+            };
+        });
+
+        displayRecap(recapData);
+
+        // Show export button
+        document.getElementById('recap-export-btn').style.display = 'inline-flex';
+
+        hideLoading();
+        toast.success('Rekap berhasil dibuat');
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error generating recap:', error);
+        toast.error('Gagal membuat rekap');
+    }
+}
+
+function displayRecap(recapData) {
+    const emptyState = document.getElementById('recap-empty');
+    const tableContainer = document.getElementById('recap-table-container');
+    const tbody = document.getElementById('recap-tbody');
+
+    if (recapData.length === 0) {
+        emptyState.style.display = 'block';
+        tableContainer.style.display = 'none';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+    tableContainer.style.display = 'block';
+
+    tbody.innerHTML = recapData.map(row => `
+        <tr>
+            <td>${row.no}</td>
+            <td><div style="font-weight: 500;">${row.name}</div></td>
+            <td>${row.nim}</td>
+            <td><span class="badge" style="background: var(--color-success); color: white;">${row.hadir}</span></td>
+            <td><span class="badge" style="background: var(--color-danger); color: white;">${row.sakit}</span></td>
+            <td><span class="badge" style="background: var(--color-warning); color: white;">${row.izin}</span></td>
+            <td><strong>${row.total}</strong></td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="flex: 1; background: var(--color-gray-200); height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="width: ${row.percentage}%; background: ${row.percentage >= 75 ? 'var(--color-success)' : row.percentage >= 50 ? 'var(--color-warning)' : 'var(--color-danger)'}; height: 100%;"></div>
+                    </div>
+                    <span style="font-weight: 600; min-width: 45px;">${row.percentage}%</span>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+
+    // Store for export
+    window.currentRecapData = recapData;
+}
+
+function exportRecapToCSV() {
+    if (!window.currentRecapData || window.currentRecapData.length === 0) {
+        return toast.warning('Tidak ada data untuk diekspor');
+    }
+
+    const dateFrom = document.getElementById('recap-date-from').value;
+    const dateTo = document.getElementById('recap-date-to').value;
+
+    // Create CSV content
+    const headers = ['No', 'Nama', 'NIM', 'Hadir', 'Sakit', 'Izin', 'Total', 'Persentase'];
+    const rows = window.currentRecapData.map(row => [
+        row.no,
+        row.name,
+        row.nim,
+        row.hadir,
+        row.sakit,
+        row.izin,
+        row.total,
+        `${row.percentage}%`
+    ]);
+
+    const csvContent = [
+        `Rekap Absensi UKM Paduan Suara`,
+        `Periode: ${dateFrom} s/d ${dateTo}`,
+        '',
+        headers.join(','),
+        ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Rekap_Absensi_${dateFrom}_${dateTo}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success('File CSV berhasil diunduh');
+}
+
 function setupRealtimeSubscription() {
-    const channel = auth.supabase
-        .channel('documents-changes')
-        .on(
-            'postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'documents'
-            },
-            (payload) => {
-                console.log('Document change detected:', payload);
-                // Reload data when changes occur
-                loadStats();
-                loadDocuments();
-            }
-        )
+    auth.supabase.channel('public-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => { loadStats(); loadDocuments(); })
         .subscribe();
 }
 
-// Make reviewDocument global
+// Global scope
 window.reviewDocument = reviewDocument;
 window.downloadDocument = downloadDocument;
+window.editMember = editMember;
+window.toggleMemberStatus = toggleMemberStatus;
+window.loadAttendanceLogs = loadAttendanceLogs;
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', initDashboard);

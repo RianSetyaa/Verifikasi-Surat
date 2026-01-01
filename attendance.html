@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensi - Sistem Manajemen Surat</title>
+  <meta name="description" content="Form Absensi Anggota UKM">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles/main.css">
+  
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+  <div class="page-wrapper">
+    <div class="main-content" style="display: flex; align-items: center; justify-content: center; padding: 2rem; min-height: 100vh;">
+      <div class="container" style="max-width: 600px;">
+
+        <!-- Header -->
+        <div class="text-center mb-4">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📅</div>
+          <h1 style="margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            Presensi Anggota
+          </h1>
+          <p class="text-secondary" id="current-date-display">...</p>
+        </div>
+
+        <!-- Attendance Card -->
+        <div class="card">
+          <div class="card-body">
+            <form id="attendance-form">
+              
+              <!-- Member Selection -->
+              <div class="form-group">
+                <label class="form-label" for="member-select">Nama Anggota</label>
+                <select class="form-control" id="member-select" name="member_id" required>
+                  <option value="" disabled selected>Pilih nama Anda...</option>
+                  <!-- Populated by JS -->
+                </select>
+              </div>
+
+              <!-- Status Selection -->
+              <div class="form-group">
+                <label class="form-label">Status Kehadiran</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                  <label class="radio-card">
+                    <input type="radio" name="status" value="hadir" checked>
+                    <div class="radio-card-content">
+                      <span style="font-size: 1.5rem;">👋</span>
+                      <span>Hadir</span>
+                    </div>
+                  </label>
+                  
+                  <label class="radio-card">
+                    <input type="radio" name="status" value="izin">
+                    <div class="radio-card-content">
+                      <span style="font-size: 1.5rem;">✉️</span>
+                      <span>Izin</span>
+                    </div>
+                  </label>
+
+                  <label class="radio-card">
+                    <input type="radio" name="status" value="sakit">
+                    <div class="radio-card-content">
+                      <span style="font-size: 1.5rem;">🏥</span>
+                      <span>Sakit</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Reason & Proof (Hidden logic handled in JS) -->
+              <div id="absence-details" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label" for="reason">Alasan <span style="color: red;">*</span></label>
+                  <textarea class="form-control" id="reason" name="reason" rows="3" placeholder="Jelaskan alasan ketidakhadiran..."></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="proof">Bukti / Surat Dokter <span style="color: red;">*</span></label>
+                  <div class="file-upload-wrapper">
+                    <input type="file" id="proof" name="proof" class="file-input" accept="image/*,.pdf,.doc,.docx">
+                    <div class="file-upload-placeholder">
+                      <div id="file-name" class="text-secondary">Klik untuk upload bukti</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100 btn-lg" style="margin-top: 1rem;">
+                Kirim Presensi
+              </button>
+
+            </form>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="index.html" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">kembali ke halaman login</a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Custom styles for radio cards */
+    .radio-card input {
+      display: none;
+    }
+    
+    .radio-card-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      border: 2px solid var(--color-gray-200);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.2s;
+      height: 100%;
+    }
+
+    .radio-card input:checked + .radio-card-content {
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    
+    .radio-card:hover .radio-card-content {
+      border-color: var(--color-primary);
+    }
+
+    /* File upload styling similar to existing one but inline */
+    .file-input {
+      display: none;
+    }
+    
+    .file-upload-placeholder {
+      padding: 1rem;
+      border: 2px dashed var(--color-gray-300);
+      border-radius: var(--radius-md);
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .file-upload-placeholder:hover {
+      border-color: var(--color-primary);
+      background-color: var(--color-gray-50);
+    }
+  </style>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/attendance.js"></script>
+</body>
+</html>
