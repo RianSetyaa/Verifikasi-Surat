@@ -173,6 +173,9 @@ function displayDocuments(documents) {
         <div class="d-flex gap-1">
           <a href="${doc.file_url}" target="_blank" class="btn btn-sm btn-secondary" title="Lihat File">👁️</a>
           <button class="btn btn-sm btn-primary" onclick="reviewDocument('${doc.id}')" title="Review">📝</button>
+          ${doc.status === 'validated' && doc.document_number ? `
+            <button class="btn btn-sm btn-success" onclick="downloadDocument('${doc.id}')" title="Download Surat">⬇️</button>
+          ` : ''}
         </div>
       </td>
     </tr>
@@ -239,10 +242,15 @@ async function reviewDocument(documentId) {
           </div>
         ` : ''}
 
-        <div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <a href="${data.file_url}" target="_blank" class="btn btn-primary btn-sm">
             📄 Buka File Dokumen
           </a>
+          ${data.status === 'validated' && data.document_number ? `
+            <button onclick="downloadDocument('${data.id}')" class="btn btn-success btn-sm">
+              ⬇️ Download Surat
+            </button>
+          ` : ''}
         </div>
       </div>
 
@@ -422,6 +430,42 @@ async function validateDocument() {
     }
 }
 
+// Download verified document
+async function downloadDocument(documentId) {
+    try {
+        showLoading('Memuat dokumen...');
+
+        const { data, error } = await auth.supabase
+            .from('documents')
+            .select('file_url, document_number, title, document_type, status')
+            .eq('id', documentId)
+            .single();
+
+        if (error) throw error;
+
+        // Check if document is validated
+        if (data.status !== 'validated' || !data.document_number) {
+            hideLoading();
+            toast.warning('Hanya dokumen yang sudah tervalidasi yang dapat diunduh');
+            return;
+        }
+
+        hideLoading();
+
+        // Use utility function to download
+        await downloadVerifiedDocument(
+            data.file_url,
+            data.document_number,
+            data.title,
+            data.document_type
+        );
+    } catch (error) {
+        hideLoading();
+        console.error('Error downloading document:', error);
+        toast.error('Gagal mengunduh dokumen');
+    }
+}
+
 // Setup real-time subscription for live updates
 function setupRealtimeSubscription() {
     const channel = auth.supabase
@@ -445,6 +489,7 @@ function setupRealtimeSubscription() {
 
 // Make reviewDocument global
 window.reviewDocument = reviewDocument;
+window.downloadDocument = downloadDocument;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', initDashboard);

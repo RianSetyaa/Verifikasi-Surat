@@ -336,6 +336,51 @@ function truncate(text, length = 50) {
     return text.substring(0, length) + '...';
 }
 
+// Download verified document
+async function downloadVerifiedDocument(fileUrl, documentNumber, title, documentType) {
+    try {
+        showLoading('Mengunduh dokumen...');
+
+        // Fetch the file
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error('Gagal mengunduh file');
+
+        const blob = await response.blob();
+
+        // Get file extension from URL
+        const urlParts = fileUrl.split('.');
+        const extension = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
+
+        // Create filename based on document number and title
+        // Format: [Nomor Surat] - [Judul].extension
+        const safeDocNumber = documentNumber.replace(/\//g, '-');
+        const safeTitle = title.substring(0, 50).replace(/[<>:"/\\|?*]/g, ''); // Remove invalid filename chars
+        const filename = `${safeDocNumber} - ${safeTitle}.${extension}`;
+
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+
+        // Trigger download
+        document.body.appendChild(a);
+        a.click();
+
+        // Cleanup
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        hideLoading();
+        toast.success('Dokumen berhasil diunduh');
+    } catch (error) {
+        hideLoading();
+        console.error('Error downloading document:', error);
+        toast.error('Gagal mengunduh dokumen');
+    }
+}
+
 // Export utilities
 window.utils = {
     formatDate,
@@ -351,5 +396,6 @@ window.utils = {
     debounce,
     getFileExtension,
     truncate,
+    downloadVerifiedDocument,
     toast
 };

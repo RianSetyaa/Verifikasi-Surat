@@ -239,6 +239,9 @@ function displayDocuments(documents) {
             <button class="btn btn-sm btn-warning" onclick="viewRevisions('${doc.id}')" title="Lihat Revisi">✏️</button>
             <button class="btn btn-sm btn-primary" onclick="showReuploadModal('${doc.id}')" title="Upload Ulang">🔄</button>
           ` : ''}
+          ${doc.status === 'validated' && doc.document_number ? `
+            <button class="btn btn-sm btn-success" onclick="downloadDocument('${doc.id}')" title="Download Surat">⬇️</button>
+          ` : ''}
         </div>
       </td>
     </tr>
@@ -438,9 +441,46 @@ async function handleReupload() {
     }
 }
 
+// Download verified document
+async function downloadDocument(documentId) {
+    try {
+        showLoading('Memuat dokumen...');
+
+        const { data, error } = await auth.supabase
+            .from('documents')
+            .select('file_url, document_number, title, document_type, status')
+            .eq('id', documentId)
+            .single();
+
+        if (error) throw error;
+
+        // Check if document is validated
+        if (data.status !== 'validated' || !data.document_number) {
+            hideLoading();
+            toast.warning('Hanya dokumen yang sudah tervalidasi yang dapat diunduh');
+            return;
+        }
+
+        hideLoading();
+
+        // Use utility function to download
+        await downloadVerifiedDocument(
+            data.file_url,
+            data.document_number,
+            data.title,
+            data.document_type
+        );
+    } catch (error) {
+        hideLoading();
+        console.error('Error downloading document:', error);
+        toast.error('Gagal mengunduh dokumen');
+    }
+}
+
 // Make viewRevisions and showReuploadModal global
 window.viewRevisions = viewRevisions;
 window.showReuploadModal = showReuploadModal;
+window.downloadDocument = downloadDocument;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', initDashboard);
