@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Sistem Manajemen Surat</title>
+  <meta name="description" content="Sistem Manajemen Surat - Login untuk mengakses dashboard">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles/main.css">
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+  <div class="page-wrapper">
+    <div class="main-content" style="display: flex; align-items: center; justify-content: center; padding: 2rem;">
+      <div class="container" style="max-width: 500px;">
+
+        <!-- Logo & Title -->
+        <div class="text-center mb-4">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+          <h1
+            style="margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            Sistem Manajemen Surat
+          </h1>
+          <p class="text-secondary">Platform digital untuk pengelolaan surat dan dokumen</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Masuk ke Akun Anda</h3>
+          </div>
+
+          <div class="card-body">
+            <form id="login-form">
+              <div class="form-group">
+                <label class="form-label" for="email">Email</label>
+                <input type="email" class="form-control" id="email" name="email" placeholder="nama@email.com" required
+                  autocomplete="email">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" class="form-control" id="password" name="password"
+                  placeholder="Masukkan password" required autocomplete="current-password">
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100 btn-lg">
+                Masuk
+              </button>
+            </form>
+
+            <div
+              style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--color-gray-200); text-align: center;">
+              <p class="text-secondary" style="margin-bottom: 0.5rem;">Belum punya akun?</p>
+              <button id="show-register" class="btn btn-secondary">
+                Daftar Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Register Card (Hidden by default) -->
+        <div class="card" id="register-card" style="display: none;">
+          <div class="card-header">
+            <h3 class="card-title">Daftar Akun Baru</h3>
+          </div>
+
+          <div class="card-body">
+            <form id="register-form">
+              <div class="form-group">
+                <label class="form-label" for="register-name">Nama Lengkap</label>
+                <input type="text" class="form-control" id="register-name" name="fullName"
+                  placeholder="Nama lengkap Anda" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="register-email">Email</label>
+                <input type="email" class="form-control" id="register-email" name="email" placeholder="nama@email.com"
+                  required autocomplete="email">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="register-password">Password</label>
+                <input type="password" class="form-control" id="register-password" name="password"
+                  placeholder="Minimal 6 karakter" required minlength="6" autocomplete="new-password">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="register-role">Role</label>
+                <select class="form-control" id="register-role" name="role" required>
+                  <option value="anggota">Anggota</option>
+                  <option value="sekretaris">Sekretaris</option>
+                </select>
+                <small class="text-secondary">Pilih sesuai dengan posisi Anda</small>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100 btn-lg">
+                Daftar
+              </button>
+            </form>
+
+            <div
+              style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--color-gray-200); text-align: center;">
+              <p class="text-secondary" style="margin-bottom: 0.5rem;">Sudah punya akun?</p>
+              <button id="show-login" class="btn btn-secondary">
+                Masuk Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script>
+    // Toggle between login and register forms
+    document.getElementById('show-register').addEventListener('click', () => {
+      document.getElementById('login-form').closest('.card').style.display = 'none';
+      document.getElementById('register-card').style.display = 'block';
+    });
+
+    document.getElementById('show-login').addEventListener('click', () => {
+      document.getElementById('register-card').style.display = 'none';
+      document.getElementById('login-form').closest('.card').style.display = 'block';
+    });
+
+    // Handle login
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const email = formData.get('email');
+      const password = formData.get('password');
+
+      try {
+        showLoading('Memproses login...');
+
+        await auth.signIn(email, password);
+
+        hideLoading();
+        toast.success('Login berhasil!');
+
+        // Redirect based on role
+        setTimeout(() => {
+          if (auth.isAnggota()) {
+            window.location.href = 'member-dashboard.html';
+          } else if (auth.isSekretaris()) {
+            window.location.href = 'secretary-dashboard.html';
+          } else {
+            window.location.href = 'member-dashboard.html'; // Default
+          }
+        }, 1000);
+      } catch (error) {
+        hideLoading();
+        toast.error(error.message || 'Login gagal. Periksa email dan password Anda.');
+      }
+    });
+
+    // Handle registration
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const fullName = formData.get('fullName');
+      const email = formData.get('email');
+      const password = formData.get('password');
+      const role = formData.get('role');
+
+      try {
+        showLoading('Membuat akun...');
+
+        await auth.signUp(email, password, fullName, role);
+
+        hideLoading();
+        toast.success('Akun berhasil dibuat! Silakan cek email untuk verifikasi.');
+
+        // Switch back to login form
+        setTimeout(() => {
+          document.getElementById('register-card').style.display = 'none';
+          document.getElementById('login-form').closest('.card').style.display = 'block';
+          e.target.reset();
+        }, 2000);
+      } catch (error) {
+        hideLoading();
+        toast.error(error.message || 'Registrasi gagal. Coba lagi.');
+      }
+    });
+
+    // Check if already logged in
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const session = await auth.getSession();
+
+        if (session && auth.getCurrentUser()) {
+          // Already logged in, redirect to dashboard
+          if (auth.isAnggota()) {
+            window.location.href = 'member-dashboard.html';
+          } else if (auth.isSekretaris()) {
+            window.location.href = 'secretary-dashboard.html';
+          }
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+      }
+    });
+  </script>
+</body>
+
+</html>

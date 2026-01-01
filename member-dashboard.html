@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Anggota - Sistem Manajemen Surat</title>
+    <meta name="description" content="Dashboard untuk upload dan tracking dokumen surat">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Google API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+    <div class="page-wrapper">
+
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="container navbar-container">
+                <a href="#" class="navbar-brand">📋 Sistem Manajemen Surat</a>
+                <ul class="navbar-nav">
+                    <li id="user-name" class="text-secondary">Loading...</li>
+                    <li><button class="btn btn-sm btn-secondary" id="logout-btn">Keluar</button></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+
+                <!-- Welcome Section -->
+                <div class="mb-4">
+                    <h1>Dashboard Anggota</h1>
+                    <p class="text-secondary">Kelola pengajuan surat dan dokumen Anda</p>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h3 class="card-title">Upload Dokumen Baru</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="upload-form">
+                            <div class="form-group">
+                                <label class="form-label" for="uploader-name">Nama Pengunggah</label>
+                                <input type="text" class="form-control" id="uploader-name" name="uploaderName"
+                                    placeholder="Masukkan nama Anda" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="title">Judul Dokumen</label>
+                                <input type="text" class="form-control" id="title" name="title"
+                                    placeholder="Contoh: Surat Permohonan Izin Kegiatan" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="document-type">Jenis Dokumen</label>
+                                <select class="form-control" id="document-type" name="documentType" required>
+                                    <option value="">Pilih jenis dokumen</option>
+                                    <option value="surat_masuk">Surat Masuk</option>
+                                    <option value="surat_keluar">Surat Keluar</option>
+                                    <option value="notulensi">Notulensi</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="description">Deskripsi</label>
+                                <textarea class="form-control" id="description" name="description" rows="3"
+                                    placeholder="Jelaskan secara singkat tentang dokumen ini..."></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">File Dokumen</label>
+                                <div class="upload-zone" id="upload-zone">
+                                    <div class="upload-icon">📄</div>
+                                    <div>
+                                        <p style="font-weight: 600; margin-bottom: 0.5rem;">
+                                            Klik atau drag & drop file di sini
+                                        </p>
+                                        <p class="text-secondary" style="font-size: 0.875rem; margin: 0;">
+                                            Mendukung PDF, DOC, DOCX, JPG, PNG (Maks. 10MB)
+                                        </p>
+                                    </div>
+                                    <input type="file" id="file-input" name="file"
+                                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display: none;" required>
+                                </div>
+                                <div id="file-info"
+                                    style="display: none; margin-top: 1rem; padding: 1rem; background: var(--color-gray-50); border-radius: var(--radius-md);">
+                                    <div style="display: flex; align-items: center; gap: 1rem;">
+                                        <div style="font-size: 2rem;">📎</div>
+                                        <div style="flex: 1;">
+                                            <div id="file-name" style="font-weight: 600;"></div>
+                                            <div id="file-size" class="text-secondary" style="font-size: 0.875rem;">
+                                            </div>
+                                        </div>
+                                        <button type="button" id="remove-file"
+                                            class="btn btn-sm btn-danger">Hapus</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
+                                Upload Dokumen
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Documents List -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0">Dokumen Saya</h3>
+                            <button class="btn btn-sm btn-secondary" id="refresh-btn">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="documents-empty"
+                            style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div style="font-size: 4rem; margin-bottom: 1rem;">📭</div>
+                            <p>Belum ada dokumen yang diupload</p>
+                        </div>
+
+                        <div class="table-container" id="documents-table-container" style="display: none;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Judul</th>
+                                        <th>Jenis</th>
+                                        <th>Status</th>
+                                        <th>Tanggal Upload</th>
+                                        <th>No. Surat</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="documents-tbody">
+                                    <!-- Documents will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Revision Modal -->
+    <div class="modal" id="revision-modal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 class="modal-title">Catatan Revisi</h3>
+                <button class="modal-close" id="close-revision-modal">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="revision-content">
+                    <!-- Revision notes will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="close-revision-btn">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/member-dashboard.js"></script>
+</body>
+
+</html>
