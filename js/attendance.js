@@ -7,11 +7,94 @@ const supabaseClient = window.supabase.createClient(
 );
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize
+    // Initialize form (show by default, let user choose status first)
     updateDateDisplay();
     await loadMembers();
     setupEventListeners();
+
+    // Check if today is practice day to show/hide "Hadir" option
+    await checkAndToggleHadirOption();
+
+    // Validate when status changes
+    document.querySelectorAll('input[name="status"]').forEach(radio => {
+        radio.addEventListener('change', async (e) => {
+            await checkScheduleAndShowForm(e.target.value);
+        });
+    });
 });
+
+async function checkAndToggleHadirOption() {
+    const hadirOption = document.querySelector('input[name="status"][value="hadir"]');
+    const hadirLabel = hadirOption?.closest('.radio-card');
+
+    if (!hadirOption || !hadirLabel) return;
+
+    // Check if today has a practice schedule
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+        const { data: schedules, error } = await supabaseClient
+            .from('attendance_schedule')
+            .select('*')
+            .eq('practice_date', today)
+            .eq('is_active', true);
+
+        if (schedules && schedules.length > 0) {
+            // Today is practice day - show Hadir option
+            hadirLabel.style.display = 'block';
+        } else {
+            // Not practice day - hide Hadir option and default to Izin
+            hadirLabel.style.display = 'none';
+            document.querySelector('input[name="status"][value="izin"]').checked = true;
+
+            // Trigger change event to show izin details if needed
+            document.querySelector('input[name="status"][value="izin"]').dispatchEvent(new Event('change'));
+        }
+    } catch (error) {
+        console.error('Error checking schedule:', error);
+        // On error, show Hadir option (safe default)
+        hadirLabel.style.display = 'block';
+    }
+}
+
+async function checkScheduleAndShowForm(status) {
+    // Check if attendance validation library is available
+    if (typeof AttendanceValidation !== 'undefined') {
+        try {
+            const scheduleStatus = await AttendanceValidation.isAttendanceOpen(status);
+
+            if (!scheduleStatus.isOpen) {
+                // Hide form, show notice
+                document.getElementById('attendance-form').parentElement.parentElement.style.display = 'none';
+                const notice = document.getElementById('schedule-notice');
+                notice.style.display = 'block';
+
+                document.getElementById('schedule-message').textContent = scheduleStatus.reason;
+
+                if (scheduleStatus.nextDate) {
+                    document.getElementById('next-schedule').textContent =
+                        'Absensi berikutnya: ' + AttendanceValidation.formatNextDate(scheduleStatus.nextDate);
+                } else {
+                    document.getElementById('next-schedule').textContent = '';
+                }
+
+                return false; // Form is closed
+            } else {
+                // Show form, hide notice
+                document.getElementById('attendance-form').parentElement.parentElement.style.display = 'block';
+                document.getElementById('schedule-notice').style.display = 'none';
+                return true; // Form is open
+            }
+        } catch (error) {
+            console.warn('Schedule validation error, continuing anyway:', error);
+            // On error, show form
+            document.getElementById('attendance-form').parentElement.parentElement.style.display = 'block';
+            document.getElementById('schedule-notice').style.display = 'none';
+            return true;
+        }
+    }
+    return true; // Default: allow if validation not available
+}
 
 function updateDateDisplay() {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -53,11 +136,58 @@ async function loadMembers() {
     }
 }
 
+async function loadPracticeDates() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 14); // Next 2 weeks
+        const futureDateStr = futureDate.toISOString().split('T')[0];
+
+        const { data, error } = await supabaseClient
+            .from('attendance_schedule')
+            .select('*')
+            .gte('practice_date', today)
+            .lte('practice_date', futureDateStr)
+            .eq('is_active', true)
+            .order('practice_date');
+
+        if (error) throw error;
+
+        const select = document.getElementById('practice-date-select');
+        select.innerHTML = '<option value="">Pilih tanggal latihan...</option>';
+
+        if (data && data.length > 0) {
+            const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+            data.forEach(schedule => {
+                const date = new Date(schedule.practice_date);
+                const dayName = dayNames[date.getDay()];
+                const formattedDate = formatDate(date);
+
+                const option = document.createElement('option');
+                option.value = schedule.practice_date;
+                option.textContent = `${formattedDate} (${dayName})`;
+                select.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.disabled = true;
+            option.textContent = 'Tidak ada jadwal latihan dalam 2 minggu';
+            select.appendChild(option);
+        }
+
+    } catch (error) {
+        console.error('Error loading practice dates:', error);
+        // toast.error('Gagal memuat jadwal latihan');
+    }
+}
+
 function setupEventListeners() {
     const reasonSection = document.getElementById('absence-details');
     const radioButtons = document.querySelectorAll('input[name="status"]');
     const reasonInput = document.getElementById('reason');
     const proofInput = document.getElementById('proof');
+    const practiceDateSelect = document.getElementById('practice-date-select');
     const filePlaceholder = document.querySelector('.file-upload-placeholder');
     const form = document.getElementById('attendance-form');
 
@@ -68,11 +198,15 @@ function setupEventListeners() {
                 reasonSection.style.display = 'none';
                 reasonInput.required = false;
                 proofInput.required = false;
+                practiceDateSelect.required = false;
             } else {
                 reasonSection.style.display = 'block';
                 reasonInput.required = true;
-                // Proof required for sick/permit
                 proofInput.required = true;
+                practiceDateSelect.required = true;
+
+                // Load practice dates when izin/sakit selected
+                loadPracticeDates();
             }
         });
     });
@@ -108,6 +242,7 @@ function setupEventListeners() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        // Show confirmation FIRST, before any loading
         if (!confirm('Pastikan data sudah benar. Kirim presensi?')) return;
 
         try {
@@ -118,6 +253,21 @@ function setupEventListeners() {
             const status = formData.get('status');
             const reason = formData.get('reason');
             const proofFile = formData.get('proof');
+            const practiceDate = formData.get('practice_date'); // For izin/sakit
+
+            // Determine attendance_date
+            let attendanceDate;
+            if (status === 'hadir') {
+                // For hadir, use today
+                attendanceDate = new Date().toISOString().split('T')[0];
+            } else {
+                // For izin/sakit, use selected practice date
+                if (!practiceDate) {
+                    hideLoading();
+                    return toast.error('Pilih tanggal latihan yang akan di-izin/sakit');
+                }
+                attendanceDate = practiceDate;
+            }
 
             let proofUrl = null;
 
@@ -143,17 +293,24 @@ function setupEventListeners() {
             // Insert into attendance_logs
             const { error: insertError } = await supabaseClient
                 .from('attendance_logs')
-                .insert([{
+                .insert({
                     member_id: memberId,
+                    attendance_date: attendanceDate, // Use calculated date
                     status: status,
-                    reason: status === 'hadir' ? null : reason,
+                    notes: status === 'hadir' ? null : reason,
                     proof_url: proofUrl
-                }]);
+                });
 
             if (insertError) throw insertError;
 
             hideLoading();
-            toast.success('Presensi berhasil dikirim!');
+
+            // Show approval status message
+            if (status === 'hadir') {
+                toast.success('Presensi berhasil dikirim!');
+            } else {
+                toast.success('Presensi berhasil dikirim! Menunggu approval sekretaris.');
+            }
 
             // Reset form
             form.reset();
@@ -163,7 +320,8 @@ function setupEventListeners() {
         } catch (error) {
             hideLoading();
             console.error('Error submitting attendance:', error);
-            toast.error('Gagal mengirim presensi. Silakan coba lagi.');
+            console.error('Error details:', error.message, error.details, error.hint);
+            toast.error('Gagal mengirim presensi: ' + (error.message || 'Silakan coba lagi'));
         }
     });
 }

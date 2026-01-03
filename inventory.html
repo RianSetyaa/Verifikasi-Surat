@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventaris - Sistem Manajemen UKM</title>
+    <meta name="description" content="Kelola inventaris barang UKM Paduan Suara">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles/main.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+    <div class="page-wrapper">
+
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="container navbar-container">
+                <a href="index.html" class="navbar-brand">📦 Inventaris UKM</a>
+                <ul class="navbar-nav">
+                    <li id="user-name" class="text-secondary">Loading...</li>
+                    <li><button class="btn btn-sm btn-secondary" id="logout-btn">Keluar</button></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+
+                <!-- Welcome Section -->
+                <div class="mb-4">
+                    <h1>Manajemen Inventaris</h1>
+                    <p class="text-secondary">Kelola inventaris barang UKM Paduan Suara</p>
+                </div>
+
+                <!-- Add Inventory Section -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h3 class="card-title">Tambah Inventaris Baru</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="inventory-form">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label" for="item-name">Nama Barang *</label>
+                                    <input type="text" class="form-control" id="item-name" name="itemName"
+                                        placeholder="Contoh: Microphone Wireless" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="quantity">Kuantitas *</label>
+                                    <input type="number" class="form-control" id="quantity" name="quantity"
+                                        placeholder="0" min="0" required>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label" for="condition">Kondisi *</label>
+                                    <select class="form-control" id="condition" name="condition" required>
+                                        <option value="">-- Pilih Kondisi --</option>
+                                        <option value="Baik">Baik</option>
+                                        <option value="Rusak Ringan">Rusak Ringan</option>
+                                        <option value="Rusak Berat">Rusak Berat</option>
+                                        <option value="Hilang">Hilang</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="location">Lokasi</label>
+                                    <input type="text" class="form-control" id="location" name="location"
+                                        placeholder="Contoh: Ruang Musik">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="description">Deskripsi</label>
+                                <textarea class="form-control" id="description" name="description" rows="3"
+                                    placeholder="Deskripsi tambahan tentang barang..."></textarea>
+                            </div>
+
+                            <input type="hidden" id="edit-item-id" value="">
+
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button type="submit" class="btn btn-primary" id="submit-btn">
+                                    ➕ Tambah Inventaris
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="cancel-edit-btn"
+                                    style="display: none;">
+                                    Batal Edit
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Filter Section -->
+                <div class="card mb-4">
+                    <div class="card-body" style="margin-bottom: 0;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem;">
+                            <div class="form-group mb-0">
+                                <label class="form-label">Kondisi</label>
+                                <select class="form-control" id="filter-condition">
+                                    <option value="">Semua Kondisi</option>
+                                    <option value="Baik">Baik</option>
+                                    <option value="Rusak Ringan">Rusak Ringan</option>
+                                    <option value="Rusak Berat">Rusak Berat</option>
+                                    <option value="Hilang">Hilang</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group mb-0">
+                                <label class="form-label">Cari Nama Barang</label>
+                                <input type="text" class="form-control" id="search-input"
+                                    placeholder="Ketik nama barang...">
+                            </div>
+
+                            <div class="form-group mb-0" style="display: flex; align-items: flex-end;">
+                                <button class="btn btn-primary w-100" id="apply-filter-btn">🔍 Filter</button>
+                            </div>
+
+                            <div class="form-group mb-0" style="display: flex; align-items: flex-end;">
+                                <button class="btn btn-secondary w-100" id="refresh-btn">🔄 Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inventory List -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title mb-0">Daftar Inventaris</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="inventory-empty"
+                            style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <div style="font-size: 4rem; margin-bottom: 1rem;">📦</div>
+                            <p>Belum ada data inventaris</p>
+                        </div>
+
+                        <div class="table-container" id="inventory-table-container" style="display: none;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>No</th>
+                                        <th>Nama Barang</th>
+                                        <th>Kuantitas</th>
+                                        <th>Kondisi</th>
+                                        <th>Lokasi</th>
+                                        <th>Ditambahkan Oleh</th>
+                                        <th>Tanggal</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventory-tbody">
+                                    <!-- Inventory items will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/inventory.js"></script>
+    <script>
+        // Global variables
+        let currentUser = null;
+        let currentItems = [];
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                currentUser = await getCurrentUser();
+                if (!currentUser) {
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                // Display user name
+                document.getElementById('user-name').textContent = currentUser.full_name;
+
+                // Load inventory
+                await loadAndDisplayInventory();
+
+                // Event listeners
+                document.getElementById('inventory-form').addEventListener('submit', handleSubmit);
+                document.getElementById('apply-filter-btn').addEventListener('click', loadAndDisplayInventory);
+                document.getElementById('refresh-btn').addEventListener('click', () => {
+                    // Clear filters
+                    document.getElementById('filter-condition').value = '';
+                    document.getElementById('search-input').value = '';
+                    loadAndDisplayInventory();
+                });
+                document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+                document.getElementById('logout-btn').addEventListener('click', handleLogout);
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showToast('Error loading page: ' + error.message, 'error');
+            }
+        });
+
+        // Load and display inventory
+        async function loadAndDisplayInventory() {
+            try {
+                const filters = {
+                    condition: document.getElementById('filter-condition').value,
+                    search: document.getElementById('search-input').value
+                };
+
+                currentItems = await InventoryManager.loadInventory(filters);
+                displayInventory(currentItems);
+            } catch (error) {
+                console.error('Error loading inventory:', error);
+                showToast('Gagal memuat inventaris', 'error');
+            }
+        }
+
+        // Display inventory in table
+        function displayInventory(items) {
+            const tbody = document.getElementById('inventory-tbody');
+            const emptyState = document.getElementById('inventory-empty');
+            const tableContainer = document.getElementById('inventory-table-container');
+
+            if (items.length === 0) {
+                emptyState.style.display = 'block';
+                tableContainer.style.display = 'none';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            tableContainer.style.display = 'block';
+
+            tbody.innerHTML = items.map((item, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>
+                        <strong>${escapeHtml(item.item_name)}</strong>
+                        ${item.description ? `<br><small class="text-secondary">${escapeHtml(item.description)}</small>` : ''}
+                    </td>
+                    <td>${item.quantity}</td>
+                    <td><span class="badge ${InventoryManager.getConditionBadgeClass(item.condition)}">${item.condition}</span></td>
+                    <td>${item.location ? escapeHtml(item.location) : '-'}</td>
+                    <td>${escapeHtml(item.added_by_name)}</td>
+                    <td>${formatDate(item.created_at)}</td>
+                    <td>
+                        ${item.added_by === currentUser.id ? `
+                            <button class="btn btn-sm btn-warning" onclick="editItem('${item.id}')">✏️ Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteItem('${item.id}')">🗑️ Hapus</button>
+                        ` : '-'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Handle form submit
+        async function handleSubmit(e) {
+            e.preventDefault();
+
+            const formData = {
+                itemName: document.getElementById('item-name').value,
+                quantity: document.getElementById('quantity').value,
+                condition: document.getElementById('condition').value,
+                location: document.getElementById('location').value,
+                description: document.getElementById('description').value
+            };
+
+            const editId = document.getElementById('edit-item-id').value;
+
+            try {
+                if (editId) {
+                    await InventoryManager.updateInventoryItem(editId, formData);
+                } else {
+                    await InventoryManager.addInventoryItem(formData);
+                }
+
+                // Reset form and reload
+                document.getElementById('inventory-form').reset();
+                document.getElementById('edit-item-id').value = '';
+                document.getElementById('submit-btn').textContent = '➕ Tambah Inventaris';
+                document.getElementById('cancel-edit-btn').style.display = 'none';
+
+                await loadAndDisplayInventory();
+            } catch (error) {
+                console.error('Error submitting form:', error);
+            }
+        }
+
+        // Edit item
+        function editItem(id) {
+            const item = currentItems.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('item-name').value = item.item_name;
+            document.getElementById('quantity').value = item.quantity;
+            document.getElementById('condition').value = item.condition;
+            document.getElementById('location').value = item.location || '';
+            document.getElementById('description').value = item.description || '';
+            document.getElementById('edit-item-id').value = id;
+
+            document.getElementById('submit-btn').textContent = '💾 Update Inventaris';
+            document.getElementById('cancel-edit-btn').style.display = 'inline-block';
+
+            // Scroll to form
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Cancel edit
+        function cancelEdit() {
+            document.getElementById('inventory-form').reset();
+            document.getElementById('edit-item-id').value = '';
+            document.getElementById('submit-btn').textContent = '➕ Tambah Inventaris';
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+        }
+
+        // Delete item
+        async function deleteItem(id) {
+            if (!confirm('Apakah Anda yakin ingin menghapus inventaris ini?')) return;
+
+            try {
+                await InventoryManager.deleteInventoryItem(id);
+                await loadAndDisplayInventory();
+            } catch (error) {
+                console.error('Error deleting item:', error);
+            }
+        }
+
+        // Handle logout
+        async function handleLogout() {
+            try {
+                await supabase.auth.signOut();
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Logout error:', error);
+                showToast('Gagal logout', 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>

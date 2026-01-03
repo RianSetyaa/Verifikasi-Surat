@@ -72,6 +72,8 @@ function setupEventListeners() {
             // Lazy load data
             if (tabId === 'attendance') loadAttendanceLogs();
             if (tabId === 'members') loadMembers();
+            if (tabId === 'inventory') loadSecretaryInventory();
+            if (tabId === 'schedule') loadSchedules(); // New: Load schedules when schedule tab is active
         });
     });
 
@@ -100,6 +102,20 @@ function setupEventListeners() {
     // --- Attendance Tab ---
     document.getElementById('attendance-filter-btn').addEventListener('click', loadAttendanceLogs);
 
+    // Pending approval filter checkbox (will be added to HTML)
+    const pendingCheckbox = document.getElementById('filter-pending-only');
+    if (pendingCheckbox) {
+        pendingCheckbox.addEventListener('change', loadAttendanceLogs);
+    }
+
+    // Rejection modal
+    document.getElementById('close-rejection-modal').addEventListener('click', closeRejectionModal);
+    document.getElementById('cancel-rejection-btn').addEventListener('click', closeRejectionModal);
+    document.getElementById('confirm-reject-btn').addEventListener('click', confirmRejectAttendance);
+
+    // --- Schedule Tab ---
+    document.getElementById('schedule-form').addEventListener('submit', handleScheduleSubmit);
+
     // --- Members Tab ---
     document.getElementById('btn-add-member').addEventListener('click', () => openMemberModal());
     document.getElementById('close-member-modal').addEventListener('click', closeMemberModal);
@@ -114,6 +130,24 @@ function setupEventListeners() {
     // --- Recap Tab ---
     document.getElementById('recap-generate-btn').addEventListener('click', generateRecap);
     document.getElementById('recap-export-btn').addEventListener('click', exportRecapToCSV);
+
+    // --- Inventory Tab ---
+    document.getElementById('inventory-form-secretary').addEventListener('submit', handleInventorySubmit);
+    document.getElementById('sec-apply-filter-btn').addEventListener('click', loadSecretaryInventory);
+    document.getElementById('sec-refresh-btn').addEventListener('click', () => {
+        document.getElementById('sec-filter-condition').value = '';
+        document.getElementById('sec-search-input').value = '';
+        loadSecretaryInventory();
+    });
+    document.getElementById('sec-export-btn').addEventListener('click', exportInventory);
+    document.getElementById('sec-cancel-edit-btn').addEventListener('click', cancelInventoryEdit);
+
+    // Inventory Import/Export
+    document.getElementById('btn-download-inventory-template').addEventListener('click', downloadInventoryTemplate);
+    document.getElementById('btn-import-inventory').addEventListener('click', () => {
+        document.getElementById('inventory-csv-file-input').click();
+    });
+    document.getElementById('inventory-csv-file-input').addEventListener('change', handleInventoryCSVImport);
 }
 
 // ==========================================
@@ -340,72 +374,131 @@ async function downloadDocument(docId) {
 // ==========================================
 
 async function loadAttendanceLogs() {
-    const dateInput = document.getElementById('attendance-date-filter');
-    const date = dateInput.value; // YYYY-MM-DD
-
-    if (!date) return;
-
     try {
+        const dateFilter = document.getElementById('attendance-date-filter').value;
+        const pendingOnly = document.getElementById('filter-pending-only')?.checked || false;
+
+        if (!dateFilter) {
+            return toast.warning('Pilih tanggal terlebih dahulu');
+        }
+
         showLoading('Memuat absensi...');
 
         // Date range for query
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const { data, error } = await auth.supabase
+        let query = auth.supabase
             .from('attendance_logs')
-            .select(`
-                *,
-                member:ukm_members(full_name)
-            `)
-            .gte('created_at', startOfDay.toISOString())
-            .lte('created_at', endOfDay.toISOString())
+            .select('*, ukm_members(full_name, nim)')
+            .eq('attendance_date', dateFilter)
             .order('created_at', { ascending: false });
+
+        // Filter pending only if checkbox checked
+        if (pendingOnly) {
+            query = query.eq('approval_status', 'pending');
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
-        // Calculate Summary
-        const summary = { hadir: 0, sakit: 0, izin: 0, alpha: 0 };
-        data.forEach(log => {
-            if (summary[log.status] !== undefined) summary[log.status]++;
-        });
-        document.getElementById('attendance-summary-text').textContent =
-            `Total: ${data.length} | Hadir: ${summary.hadir} | Izin: ${summary.izin} | Sakit: ${summary.sakit}`;
+        hideLoading();
 
-        // Render Table
         const tbody = document.getElementById('attendance-tbody');
         const emptyState = document.getElementById('attendance-empty');
 
-        if (data.length === 0) {
+        if (!data || data.length === 0) {
             tbody.innerHTML = '';
             emptyState.style.display = 'block';
-        } else {
-            emptyState.style.display = 'none';
-            tbody.innerHTML = data.map(log => `
-                <tr>
-                    <td><div style="font-weight: 500;">${log.member?.full_name || 'Unknown'}</div></td>
-                    <td>${new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td>
-                        <span class="badge" style="background: ${getStatusColor(log.status)}; color: white;">
-                            ${log.status.toUpperCase()}
-                        </span>
-                    </td>
-                    <td>${log.reason || '-'}</td>
-                    <td>
-                        ${log.proof_url ? `<a href="${log.proof_url}" target="_blank" class="btn btn-sm btn-secondary">Bukti</a>` : '-'}
-                    </td>
-                </tr>
-            `).join('');
+            document.getElementById('attendance-summary-text').textContent = 'Summary: -';
+            return;
         }
 
+        emptyState.style.display = 'none';
+
+        // Calculate summary
+        const hadir = data.filter(d => d.status === 'hadir').length;
+        const sakit = data.filter(d => d.status === 'sakit').length;
+        const izin = data.filter(d => d.status === 'izin').length;
+        const alpha = data.filter(d => d.status === 'alpha').length;
+        const pending = data.filter(d => d.approval_status === 'pending').length;
+
+        document.getElementById('attendance-summary-text').innerHTML =
+            `<strong>Hadir: ${hadir}</strong> | Sakit: ${sakit} | Izin: ${izin} | Alpha: ${alpha}` +
+            (pending > 0 ? ` | <span style="color: var(--color-warning);">⏳ Pending: ${pending}</span>` : '');
+
+        tbody.innerHTML = data.map(log => {
+            const memberName = log.ukm_members?.full_name || 'N/A';
+            const time = new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+            // Status badge
+            const statusBadge = getStatusBadge(log.status);
+
+            // Approval badge
+            const approvalBadge = getApprovalBadge(log.approval_status, log.rejection_reason);
+
+            // Action buttons
+            const actionButtons = getActionButtons(log);
+
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(memberName)}</strong><br><small class="text-secondary">${log.ukm_members?.nim || '-'}</small></td>
+                    <td>${time}</td>
+                    <td>${statusBadge}</td>
+                    <td>${approvalBadge}</td>
+                    <td>${log.notes || '-'}</td>
+                    <td>${log.proof_url ? `<a href="${log.proof_url}" target="_blank" class="btn btn-sm btn-secondary">📎 Lihat</a>` : '-'}</td>
+                    <td>${actionButtons}</td>
+                </tr>
+            `;
+        }).join('');
+
     } catch (error) {
+        hideLoading();
         console.error('Error loading attendance:', error);
         toast.error('Gagal memuat absensi');
-    } finally {
-        hideLoading();
     }
+}
+
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'hadir': '<span class="badge badge-success">✓ Hadir</span>',
+        'sakit': '<span class="badge badge-warning">🤒 Sakit</span>',
+        'izin': '<span class="badge badge-info">📝 Izin</span>',
+        'alpha': '<span class="badge badge-danger">❌ Alpha</span>'
+    };
+    return badges[status] || status;
+}
+
+function getApprovalBadge(approvalStatus, rejectionReason) {
+    if (approvalStatus === 'pending') {
+        return '<span class="badge" style="background: #ffa500;">⏳ Pending</span>';
+    } else if (approvalStatus === 'approved') {
+        return '<span class="badge badge-success">✅ Approved</span>';
+    } else if (approvalStatus === 'rejected') {
+        return `<span class="badge badge-danger">🚫 Rejected</span>${rejectionReason ? `<br><small class="text-secondary">${escapeHtml(rejectionReason)}</small>` : ''}`;
+    }
+    return '-';
+}
+
+function getActionButtons(log) {
+    // Only show approve/reject for pending items
+    if (log.approval_status === 'pending') {
+        return `
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-success" onclick="approveAttendance('${log.id}')">✅ Approve</button>
+                <button class="btn btn-sm btn-danger" onclick="showRejectionModal('${log.id}')">🚫 Reject</button>
+            </div>
+        `;
+    }
+    return '-';
 }
 
 function getStatusColor(status) {
@@ -839,9 +932,570 @@ function exportRecapToCSV() {
     toast.success('File CSV berhasil diunduh');
 }
 
+// ==========================================
+// INVENTORY MANAGEMENT LOGIC
+// ==========================================
+
+let currentInventoryItems = [];
+let currentInventoryEditId = null;
+
+async function loadSecretaryInventory() {
+    try {
+        showLoading('Memuat inventaris...');
+
+        const filters = {
+            condition: document.getElementById('sec-filter-condition').value,
+            search: document.getElementById('sec-search-input').value
+        };
+
+        currentInventoryItems = await InventoryManager.loadInventory(filters);
+        await updateInventoryStats();
+        displaySecretaryInventory(currentInventoryItems);
+
+        hideLoading();
+    } catch (error) {
+        hideLoading();
+        console.error('Error loading inventory:', error);
+        toast.error('Gagal memuat inventaris');
+    }
+}
+
+async function updateInventoryStats() {
+    try {
+        const stats = await InventoryManager.getInventoryStats();
+
+        document.getElementById('total-items').textContent = stats.total;
+        document.getElementById('baik-items').textContent = stats.baik;
+        document.getElementById('rusak-items').textContent = stats.rusakRingan + stats.rusakBerat;
+        document.getElementById('hilang-items').textContent = stats.hilang;
+    } catch (error) {
+        console.error('Error updating stats:', error);
+    }
+}
+
+function displaySecretaryInventory(items) {
+    const tbody = document.getElementById('sec-inventory-tbody');
+    const emptyState = document.getElementById('sec-inventory-empty');
+    const tableContainer = document.getElementById('sec-inventory-table-container');
+
+    if (items.length === 0) {
+        emptyState.style.display = 'block';
+        tableContainer.style.display = 'none';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+    tableContainer.style.display = 'block';
+
+    tbody.innerHTML = items.map((item, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>
+                <strong>${escapeHtml(item.item_name)}</strong>
+                ${item.description ? `<br><small class="text-secondary">${escapeHtml(item.description)}</small>` : ''}
+            </td>
+            <td>${item.quantity}</td>
+            <td><span class="badge ${InventoryManager.getConditionBadgeClass(item.condition)}">${item.condition}</span></td>
+            <td>${item.location ? escapeHtml(item.location) : '-'}</td>
+            <td>${escapeHtml(item.added_by_name)}</td>
+            <td>${formatDateShort(item.created_at)}</td>
+            <td>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-warning" onclick="editInventoryItem('${item.id}')">✏️ Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInventoryItem('${item.id}')">🗑️ Hapus</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function handleInventorySubmit(e) {
+    e.preventDefault();
+
+    const formData = {
+        itemName: document.getElementById('sec-item-name').value,
+        quantity: document.getElementById('sec-quantity').value,
+        condition: document.getElementById('sec-condition').value,
+        location: document.getElementById('sec-location').value,
+        description: document.getElementById('sec-description').value
+    };
+
+    const editId = document.getElementById('sec-edit-item-id').value;
+
+    try {
+        showLoading(editId ? 'Mengupdate...' : 'Menambahkan...');
+
+        if (editId) {
+            await InventoryManager.updateInventoryItem(editId, formData);
+        } else {
+            await InventoryManager.addInventoryItem(formData);
+        }
+
+        // Reset form
+        document.getElementById('inventory-form-secretary').reset();
+        document.getElementById('sec-edit-item-id').value = '';
+        document.getElementById('sec-submit-btn').textContent = '➕ Tambah Inventaris';
+        document.getElementById('sec-cancel-edit-btn').style.display = 'none';
+        currentInventoryEditId = null;
+
+        await loadSecretaryInventory();
+        hideLoading();
+    } catch (error) {
+        hideLoading();
+        console.error('Error submitting inventory:', error);
+    }
+}
+
+function editInventoryItem(id) {
+    const item = currentInventoryItems.find(i => i.id === id);
+    if (!item) return;
+
+    document.getElementById('sec-item-name').value = item.item_name;
+    document.getElementById('sec-quantity').value = item.quantity;
+    document.getElementById('sec-condition').value = item.condition;
+    document.getElementById('sec-location').value = item.location || '';
+    document.getElementById('sec-description').value = item.description || '';
+    document.getElementById('sec-edit-item-id').value = id;
+
+    document.getElementById('sec-submit-btn').textContent = '💾 Update Inventaris';
+    document.getElementById('sec-cancel-edit-btn').style.display = 'inline-block';
+    currentInventoryEditId = id;
+
+    // Scroll to form
+    document.getElementById('inventory-form-secretary').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelInventoryEdit() {
+    document.getElementById('inventory-form-secretary').reset();
+    document.getElementById('sec-edit-item-id').value = '';
+    document.getElementById('sec-submit-btn').textContent = '➕ Tambah Inventaris';
+    document.getElementById('sec-cancel-edit-btn').style.display = 'none';
+    currentInventoryEditId = null;
+}
+
+async function deleteInventoryItem(id) {
+    if (!await confirm('Apakah Anda yakin ingin menghapus inventaris ini?')) return;
+
+    try {
+        showLoading('Menghapus...');
+        await InventoryManager.deleteInventoryItem(id);
+        await loadSecretaryInventory();
+        hideLoading();
+    } catch (error) {
+        hideLoading();
+        console.error('Error deleting item:', error);
+    }
+}
+
+async function exportInventory() {
+    try {
+        if (currentInventoryItems.length === 0) {
+            return toast.warning('Tidak ada data untuk diexport');
+        }
+
+        const dateFrom = document.getElementById('sec-filter-condition').value ? `_${document.getElementById('sec-filter-condition').value}` : '';
+        const filename = `inventaris_ukm_${formatDate(new Date()).replace(/\//g, '-')}${dateFrom}.csv`;
+
+        InventoryManager.exportInventoryToCSV(currentInventoryItems, filename);
+    } catch (error) {
+        console.error('Error exporting:', error);
+        toast.error('Gagal export inventaris');
+    }
+}
+
+// Download CSV Template for Inventory
+function downloadInventoryTemplate() {
+    const headers = ['Nama Barang', 'Kuantitas', 'Kondisi', 'Lokasi', 'Deskripsi'];
+    const exampleRow = ['Microphone Wireless', '5', 'Baik', 'Ruang Musik', 'Shure SM58'];
+
+    const csvContent = headers.join(',') + '\n' + exampleRow.join(',');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Template_Inventaris_UKM.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success('Template berhasil diunduh');
+}
+
+// Handle CSV Import for Inventory
+async function handleInventoryCSVImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    event.target.value = ''; // Reset input
+
+    if (!file.name.endsWith('.csv')) {
+        return toast.error('File harus berformat CSV');
+    }
+
+    try {
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+
+        if (lines.length < 2) {
+            return toast.error('File CSV kosong atau tidak valid');
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const rows = lines.slice(1);
+
+        const expectedHeaders = ['Nama Barang', 'Kuantitas', 'Kondisi', 'Lokasi', 'Deskripsi'];
+
+        const headersMatch = expectedHeaders.every((eh, i) => headers[i] && headers[i].includes(eh));
+        if (!headersMatch) {
+            return toast.error('Format CSV tidak sesuai template. Gunakan template yang sudah disediakan.');
+        }
+
+        const inventoryItems = [];
+        const user = auth.getCurrentUser();
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i].split(',').map(cell => cell.trim().replace(/^"|"$/g, '')); // Remove quotes
+
+            if (!row[0] || !row[1] || !row[2]) {
+                console.warn(`Skipping row ${i + 2}: missing required fields`);
+                continue; // Skip if missing name, quantity, or condition
+            }
+
+            // Validate condition
+            const validConditions = ['Baik', 'Rusak Ringan', 'Rusak Berat', 'Hilang'];
+            if (!validConditions.includes(row[2])) {
+                console.warn(`Skipping row ${i + 2}: invalid condition "${row[2]}"`);
+                continue;
+            }
+
+            inventoryItems.push({
+                item_name: row[0],
+                quantity: parseInt(row[1]) || 0,
+                condition: row[2],
+                location: row[3] || null,
+                description: row[4] || null,
+                added_by: user.id,
+                added_by_name: user.full_name
+            });
+        }
+
+        if (inventoryItems.length === 0) {
+            return toast.error('Tidak ada data valid untuk diimport');
+        }
+
+        const confirmed = await confirm(
+            `Import ${inventoryItems.length} item inventaris ke database?`
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        showLoading(`Mengimport ${inventoryItems.length} item...`);
+
+        const { data, error } = await auth.supabase
+            .from('inventory')
+            .insert(inventoryItems)
+            .select();
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success(`Berhasil mengimport ${data.length} item inventaris!`);
+
+        loadSecretaryInventory();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error importing CSV:', error);
+        toast.error('Gagal mengimport data. Periksa format file CSV.');
+    }
+}
+
+// ==========================================
+// ATTENDANCE APPROVAL FUNCTIONS
+// ==========================================
+
+async function approveAttendance(logId) {
+    try {
+        const confirmed = await confirm('Approve absensi ini?');
+        if (!confirmed) return;
+
+        showLoading('Menyetujui absensi...');
+
+        const user = auth.getCurrentUser();
+        const { error } = await auth.supabase
+            .from('attendance_logs')
+            .update({
+                approval_status: 'approved',
+                reviewed_by: user.id,
+                reviewed_at: new Date().toISOString()
+            })
+            .eq('id', logId);
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success('Absensi diapprove!');
+        loadAttendanceLogs();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error approving attendance:', error);
+        toast.error('Gagal approve absensi');
+    }
+}
+
+function showRejectionModal(logId) {
+    document.getElementById('rejection-log-id').value = logId;
+    document.getElementById('rejection-reason').value = '';
+    document.getElementById('rejection-modal').style.display = 'flex';
+}
+
+function closeRejectionModal() {
+    document.getElementById('rejection-modal').style.display = 'none';
+}
+
+async function confirmRejectAttendance() {
+    try {
+        const logId = document.getElementById('rejection-log-id').value;
+        const reason = document.getElementById('rejection-reason').value.trim();
+
+        if (!reason) {
+            return toast.warning('Masukkan alasan penolakan');
+        }
+
+        showLoading('Menolak absensi...');
+
+        const user = auth.getCurrentUser();
+        const { error } = await auth.supabase
+            .from('attendance_logs')
+            .update({
+                status: 'alpha', // Change status to alpha
+                approval_status: 'rejected',
+                rejection_reason: reason,
+                reviewed_by: user.id,
+                reviewed_at: new Date().toISOString()
+            })
+            .eq('id', logId);
+
+        if (error) throw error;
+
+        hideLoading();
+        closeRejectionModal();
+        toast.success('Absensi ditolak dan diubah menjadi Alpha');
+        loadAttendanceLogs();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error rejecting attendance:', error);
+        toast.error('Gagal reject absensi');
+    }
+}
+
+// ==========================================
+// SCHEDULE MANAGEMENT FUNCTIONS
+// ==========================================
+
+let currentSchedules = [];
+
+async function loadSchedules() {
+    try {
+        showLoading('Memuat jadwal...');
+
+        const { data, error } = await auth.supabase
+            .from('attendance_schedule')
+            .select('*')
+            .order('practice_date', { ascending: true });
+
+        if (error) throw error;
+
+        hideLoading();
+        currentSchedules = data || [];
+        displaySchedules(currentSchedules);
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error loading schedules:', error);
+        toast.error('Gagal memuat jadwal');
+    }
+}
+
+function displaySchedules(schedules) {
+    const tbody = document.getElementById('schedule-tbody');
+    const emptyState = document.getElementById('schedule-empty');
+
+    if (!schedules || schedules.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+    // Sort by date (ascending)
+    const sortedSchedules = [...schedules].sort((a, b) =>
+        new Date(a.practice_date) - new Date(b.practice_date)
+    );
+
+    tbody.innerHTML = sortedSchedules.map(schedule => {
+        const practiceDate = new Date(schedule.practice_date);
+        const dayName = dayNames[practiceDate.getDay()];
+        const formattedDate = formatDate(practiceDate);
+        const isPast = practiceDate < new Date().setHours(0, 0, 0, 0);
+
+        return `
+        <tr style="${isPast ? 'opacity: 0.6;' : ''}">
+            <td><strong>${formattedDate}</strong></td>
+            <td>${dayName}</td>
+            <td>${schedule.start_time}</td>
+            <td>${schedule.end_time}</td>
+            <td>
+                ${schedule.is_active ?
+                '<span class="badge badge-success">Aktif</span>' :
+                '<span class="badge badge-secondary">Non-aktif</span>'
+            }
+                ${isPast ? '<span class="badge badge-secondary ml-1">Sudah Lewat</span>' : ''}
+            </td>
+            <td>
+                <div class="d-flex gap-1">
+                    ${!isPast ? `
+                    <button class="btn btn-sm ${schedule.is_active ? 'btn-secondary' : 'btn-success'}" 
+                            onclick="toggleScheduleStatus('${schedule.id}', ${!schedule.is_active})">
+                        ${schedule.is_active ? '🔒 Nonaktifkan' : '✓ Aktifkan'}
+                    </button>
+                    ` : ''}
+                    <button class="btn btn-sm btn-danger" onclick="deleteSchedule('${schedule.id}')">🗑️ Hapus</button>
+                </div>
+            </td>
+        </tr>
+    `;
+    }).join('');
+}
+
+async function handleScheduleSubmit(e) {
+    e.preventDefault();
+
+    const practiceDate = document.getElementById('schedule-date').value;
+    const startTime = document.getElementById('schedule-start').value;
+    const endTime = document.getElementById('schedule-end').value;
+
+    if (!practiceDate || !startTime || !endTime) {
+        return toast.warning('Lengkapi semua field');
+    }
+
+    // Validate time
+    if (startTime >= endTime) {
+        return toast.error('Jam tutup harus lebih besar dari jam buka');
+    }
+
+    // Validate date not in past
+    const selectedDate = new Date(practiceDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDate < today) {
+        return toast.error('Tidak bisa menambah jadwal untuk tanggal yang sudah lewat');
+    }
+
+    try {
+        showLoading('Menyimpan jadwal...');
+
+        const scheduleData = {
+            practice_date: practiceDate,
+            start_time: startTime,
+            end_time: endTime,
+            is_active: true
+        };
+
+        const { error } = await auth.supabase
+            .from('attendance_schedule')
+            .insert([scheduleData]);
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success('Jadwal berhasil ditambahkan!');
+
+        // Reset form
+        document.getElementById('schedule-form').reset();
+        document.getElementById('schedule-start').value = '13:00';
+        document.getElementById('schedule-end').value = '22:00';
+
+        // Reload schedules
+        loadSchedules();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error saving schedule:', error);
+
+        if (error.code === '23505') { // Unique violation
+            toast.error('Jadwal untuk tanggal ini sudah ada');
+        } else {
+            toast.error('Gagal menyimpan jadwal: ' + error.message);
+        }
+    }
+}
+
+async function toggleScheduleStatus(id, newStatus) {
+    try {
+        showLoading('Mengupdate status...');
+
+        const { error } = await auth.supabase
+            .from('attendance_schedule')
+            .update({ is_active: newStatus })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success(`Jadwal ${newStatus ? 'diaktifkan' : 'dinonaktifkan'}`);
+        loadSchedules();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error toggling schedule:', error);
+        toast.error('Gagal mengupdate status');
+    }
+}
+
+async function deleteSchedule(id) {
+    try {
+        const confirmed = await confirm('Hapus jadwal ini?');
+        if (!confirmed) return;
+
+        showLoading('Menghapus jadwal...');
+
+        const { error } = await auth.supabase
+            .from('attendance_schedule')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        hideLoading();
+        toast.success('Jadwal berhasil dihapus');
+        loadSchedules();
+
+    } catch (error) {
+        hideLoading();
+        console.error('Error deleting schedule:', error);
+        toast.error('Gagal menghapus jadwal');
+    }
+}
+
+// ==========================================
+// REALTIME SUBSCRIPTION
+// ==========================================
+
 function setupRealtimeSubscription() {
     auth.supabase.channel('public-updates')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => { loadStats(); loadDocuments(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => {
+            loadStats();
+            loadDocuments();
+        })
         .subscribe();
 }
 
@@ -849,7 +1503,12 @@ function setupRealtimeSubscription() {
 window.reviewDocument = reviewDocument;
 window.downloadDocument = downloadDocument;
 window.editMember = editMember;
-window.toggleMemberStatus = toggleMemberStatus;
-window.loadAttendanceLogs = loadAttendanceLogs;
+window.editInventoryItem = editInventoryItem;
+window.deleteInventoryItem = deleteInventoryItem;
+window.approveAttendance = approveAttendance;
+window.showRejectionModal = showRejectionModal;
+window.toggleScheduleStatus = toggleScheduleStatus;
+window.deleteSchedule = deleteSchedule;
 
-document.addEventListener('DOMContentLoaded', initDashboard);
+// Initialize
+initDashboard();

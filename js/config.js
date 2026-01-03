@@ -33,6 +33,29 @@ const CONFIG = {
       pending: 'Menunggu Review',
       revision: 'Perlu Revisi',
       validated: 'Tervalidasi'
+    },
+    inventory: {
+      conditions: {
+        baik: 'Baik',
+        rusak_ringan: 'Rusak Ringan',
+        rusak_berat: 'Rusak Berat',
+        hilang: 'Hilang'
+      }
+    },
+    attendance: {
+      schedule: {
+        practiceDays: [1, 3, 5], // Senin, Rabu, Jumat (0=Minggu, 1=Senin, dst)
+        openTime: '13:00',
+        closeTime: '22:00'
+      },
+      approvalRequired: ['sakit', 'izin'], // Status yang perlu approval sekretaris
+      autoApprove: ['hadir'], // Status yang langsung approved
+      statusLabels: {
+        hadir: 'Hadir',
+        sakit: 'Sakit',
+        izin: 'Izin',
+        alpha: 'Alpha'
+      }
     }
   }
 };

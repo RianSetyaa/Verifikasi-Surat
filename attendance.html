@@ -9,20 +9,22 @@
 
   <!-- Styles -->
   <link rel="stylesheet" href="styles/main.css">
-  
+
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
   <div class="page-wrapper">
-    <div class="main-content" style="display: flex; align-items: center; justify-content: center; padding: 2rem; min-height: 100vh;">
+    <div class="main-content"
+      style="display: flex; align-items: center; justify-content: center; padding: 2rem; min-height: 100vh;">
       <div class="container" style="max-width: 600px;">
 
         <!-- Header -->
         <div class="text-center mb-4">
           <div style="font-size: 3rem; margin-bottom: 1rem;">📅</div>
-          <h1 style="margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          <h1
+            style="margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             Presensi Anggota
           </h1>
           <p class="text-secondary" id="current-date-display">...</p>
@@ -32,7 +34,7 @@
         <div class="card">
           <div class="card-body">
             <form id="attendance-form">
-              
+
               <!-- Member Selection -->
               <div class="form-group">
                 <label class="form-label" for="member-select">Nama Anggota</label>
@@ -53,7 +55,7 @@
                       <span>Hadir</span>
                     </div>
                   </label>
-                  
+
                   <label class="radio-card">
                     <input type="radio" name="status" value="izin">
                     <div class="radio-card-content">
@@ -75,8 +77,19 @@
               <!-- Reason & Proof (Hidden logic handled in JS) -->
               <div id="absence-details" style="display: none;">
                 <div class="form-group">
+                  <label class="form-label" for="practice-date-select">Untuk Latihan Tanggal <span
+                      style="color: red;">*</span></label>
+                  <select class="form-control" id="practice-date-select" name="practice_date">
+                    <option value="">Pilih tanggal latihan...</option>
+                    <!-- Populated by JS -->
+                  </select>
+                  <small class="text-secondary">Pilih tanggal latihan yang tidak dapat Anda hadiri</small>
+                </div>
+
+                <div class="form-group">
                   <label class="form-label" for="reason">Alasan <span style="color: red;">*</span></label>
-                  <textarea class="form-control" id="reason" name="reason" rows="3" placeholder="Jelaskan alasan ketidakhadiran..."></textarea>
+                  <textarea class="form-control" id="reason" name="reason" rows="3"
+                    placeholder="Jelaskan alasan ketidakhadiran..."></textarea>
                 </div>
 
                 <div class="form-group">
@@ -98,8 +111,20 @@
           </div>
         </div>
 
+        <!-- Schedule Notice (Shown if attendance is closed) -->
+        <div id="schedule-notice" class="card"
+          style="display: none; background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);">
+          <div class="card-body" style="text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin-bottom: 0.5rem;">Absensi Ditutup</h3>
+            <p id="schedule-message" class="text-secondary mb-2">...</p>
+            <p id="next-schedule" style="font-weight: 600; color: var(--color-primary);"></p>
+          </div>
+        </div>
+
         <div style="text-align: center; margin-top: 2rem;">
-            <a href="index.html" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">kembali ke halaman login</a>
+          <a href="index.html" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem;">kembali
+            ke halaman login</a>
         </div>
 
       </div>
@@ -111,7 +136,7 @@
     .radio-card input {
       display: none;
     }
-    
+
     .radio-card-content {
       display: flex;
       flex-direction: column;
@@ -125,12 +150,12 @@
       height: 100%;
     }
 
-    .radio-card input:checked + .radio-card-content {
+    .radio-card input:checked+.radio-card-content {
       border-color: var(--color-primary);
       background-color: var(--color-primary-light);
       color: var(--color-primary);
     }
-    
+
     .radio-card:hover .radio-card-content {
       border-color: var(--color-primary);
     }
@@ -139,7 +164,7 @@
     .file-input {
       display: none;
     }
-    
+
     .file-upload-placeholder {
       padding: 1rem;
       border: 2px dashed var(--color-gray-300);
@@ -158,6 +183,9 @@
   <!-- Scripts -->
   <script src="js/config.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/attendance-validation.js"></script>
   <script src="js/attendance.js"></script>
 </body>
+
 </html>
